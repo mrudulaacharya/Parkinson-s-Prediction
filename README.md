@@ -64,4 +64,8 @@ parkinsons-detection/
 
 ## Code Explanations
 
+- merge_data.py : Iterates through all CSV files in a specified directory, loads each file into a pandas DataFrame, and stores them in a list. It then merges these DataFrames on the common column PATNO using an inner join, resulting in a single merged DataFrame.
 
+- drop_columns.py : Drops columns that seem irrelevant to the prediction of target : 'COHORT'
+
+- correlation.py : Loads a CSV file into a DataFrame, selects only the numeric columns, and calculates the correlation matrix for these columns. It then visualizes the correlation matrix as a heatmap without annotation, showing the strength of relationships between numerical features in the dataset.
