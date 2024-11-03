@@ -4,7 +4,7 @@ import pandas as pd
 df = pd.read_csv('merged__m_output.csv')
 
 # List of columns to drop
-columns_to_drop = ['ENROLL_DATE', 'EVENT_ID_x', 'PAG_NAME_x', 'INFODT_x', 'PATNO', 'RUNDATE', 'PROJECTID', 'EVENT_ID_y', 'INFODT_y', 'ORIG_ENTRY', 'LAST_UPDATE', 'ORIG_ENTRY.1', 'LAST_UPDATE.1', 'ORIG_ENTRY.2', 'LAST_UPDATE.2', 'PDMEDDT', 'PDMEDTM', 'EXAMDT', 'EXAMTM', 'ORIG_ENTRY.3', 'LAST_UPDATE.3', 'REC_ID', 'PAG_NAME_y']
+columns_to_drop = ['ENROLL_DATE', 'EVENT_ID_x', 'PAG_NAME_x', 'INFODT_x', 'PATNO', 'RUNDATE', 'PROJECTID', 'EVENT_ID_y', 'INFODT_y', 'ORIG_ENTRY', 'LAST_UPDATE', 'ORIG_ENTRY.1', 'LAST_UPDATE.1', 'ORIG_ENTRY.2', 'LAST_UPDATE.2', 'PDMEDDT', 'PDMEDTM', 'EXAMDT', 'EXAMTM', 'ORIG_ENTRY.3', 'LAST_UPDATE.3', 'REC_ID', 'PAG_NAME_y', 'AV133STDY', 'TAUSTDY', 'GAITSTDY', 'PISTDY', 'SV2ASTDY', 'AFICBERB', 'ASHKJEW', 'BASQUE', 'BIRTHDT', 'HISPLAT', 'RAASIAN', 'RABLACK', 'RAHAWOPI', 'RAINDALS', 'RANOS', 'RAWHITE', 'RAUNKNOWN', 'NUPSOURC', 'NUPSOURC.1', 'NUPSOURC.2']
 
 # Drop the specified columns
 df = df.drop(columns=columns_to_drop)
