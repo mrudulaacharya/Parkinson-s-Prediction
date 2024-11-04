@@ -69,3 +69,5 @@ parkinsons-detection/
 - drop_columns.py : Drops columns that seem irrelevant to the prediction of target : 'COHORT'
 
 - correlation.py : Loads a CSV file into a DataFrame, selects only the numeric columns, and calculates the correlation matrix for these columns. It then visualizes the correlation matrix as a heatmap without annotation, showing the strength of relationships between numerical features in the dataset.
+
+- resampling.py : Categorizes participants into specified age groups, and balances the age distribution by under-sampling the '60-69' group and over-sampling the '80 and above' group to match the count of the '70-79' group.
