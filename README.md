@@ -28,8 +28,8 @@ To run this project, you need:
 ### Installation
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/parkinsons-detection.git
-   cd parkinsons-detection
+   git clone https://github.com/mrudulaacharya/Parkinson-s-Prediction.git
+   cd Parkinson-s-Prediction
 
 ## Dataset
 
