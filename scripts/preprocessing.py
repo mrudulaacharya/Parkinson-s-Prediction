@@ -8,7 +8,7 @@ def clean_data(df):
     # Drop duplicate rows
     df = df.drop_duplicates()
     # Drop columns with more than 90% missing values
-    drop_threshold = 0.9 * len(df)
+    drop_threshold = 0.6 * len(df)
     missing_values = df.isnull().sum()
     columns_to_drop = missing_values[missing_values > drop_threshold].index.tolist()
     df = df.drop(columns=columns_to_drop)
