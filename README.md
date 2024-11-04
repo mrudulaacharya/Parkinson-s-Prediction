@@ -37,7 +37,7 @@ To run this project, you need:
 ## Project Folder Structure
 
 ```plaintext
-project_root/
+Parkinsons-Prediction/
 ├── README.md                     # Project documentation
 ├── data/                         # Folder for datasets
    ├── cleaned_data.csv           # Raw, unprocessed data 
@@ -61,8 +61,7 @@ project_root/
    ├── test_outlier.py            # Unit test for outlier cleaning
    └── test_resampling.py         # Unit test for data resampling
 
-
-
+```
 
 ## Code Explanations
 
@@ -77,7 +76,7 @@ project_root/
 - resampling.py : Categorizes participants into specified age groups, and balances the age distribution by under-sampling the '60-69' group and over-sampling the '80 and above' group to match the count of the '70-79' group.
 
 
-##  Bias Detection and Mitigation
+## Bias Detection and Mitigation
 
 This analysis detects potential biases across different age groups by segmenting the data into age bins (Under 50, 50-59, 60-69, 70-79, 80 and above). By analyzing the model's performance metrics such as accuracy, precision, and recall within each age group, we identified discrepancies that suggested age-related biases. Iterative monitoring of these age slices helped ensure consistent performance, with significant deviations highlighting potential areas of concern. Future work includes using fairness tools to automate bias detection, ensuring model fairness as the dataset evolves.
 
