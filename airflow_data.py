@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 from datetime import datetime, timedelta
@@ -29,7 +28,7 @@ dag = DAG(
 #Task 0a
 def participant_demographics_biospecimen_merged(**kwargs):
     # Load Participant_Status table
-    #participant_status = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv')
+    participant_status = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv')
 
     # Load Demographics table
     demographics = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Demographics_27Oct2024.csv')
