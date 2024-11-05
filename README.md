@@ -83,6 +83,4 @@ Detecting Bias - The dataset contains 136 columns, with a mix of numerical and t
 1) COHORT - Indicates participant groups, which might represent a categorical variable.
 2) ENROLL_AGE - Enrollment age, a continuous variable, which can be grouped into age brackets for analysis.
 
-Mitigation of Bias - To address potential biases arising from imbalanced age groups in the dataset, re-sampling strategy to balance representation across key age groups.
-The age brackets are: Under 50, 50-59, 60-69, 70-79, and 80 and above. We set the 70-79 age group as the target size, serving as a baseline for balancing. The 60-69 group, which exceeded this size, was downsampled to reduce its representation, while the 80 and above group, which had fewer participants, was oversampled to increase its representation. This approach created a more uniform age distribution, improving fairness in the dataset.
-
+Mitigation of Bias - To address potential biases arising from imbalanced age groups in the dataset, re-sampling strategy was used to balance representation across key age groups. The age brackets are: Under 50, 50-59, 60-69, 70-79, and 80 and above. We set the 70-79 age group as the target size, serving as a baseline for balancing. The 60-69 group, which exceeded this size, was downsampled to reduce its representation, while the 80 and above group, which had fewer participants, was oversampled to increase its representation. This approach created a more uniform age distribution, improving fairness in the dataset.
