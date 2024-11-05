@@ -78,5 +78,11 @@ Parkinsons-Prediction/
 
 ## Bias Detection and Mitigation
 
-This analysis detects potential biases across different age groups by segmenting the data into age bins (Under 50, 50-59, 60-69, 70-79, 80 and above). By analyzing the model's performance metrics such as accuracy, precision, and recall within each age group, we identified discrepancies that suggested age-related biases. Iterative monitoring of these age slices helped ensure consistent performance, with significant deviations highlighting potential areas of concern. Future work includes using fairness tools to automate bias detection, ensuring model fairness as the dataset evolves.
+Detecting Bias - The dataset contains 136 columns, with a mix of numerical and text-based columns. To detect bias, we can start by examining the following columns that may represent demographic or categorical attributes:
+
+1) COHORT - Indicates participant groups, which might represent a categorical variable.
+2) ENROLL_AGE - Enrollment age, a continuous variable, which can be grouped into age brackets for analysis.
+
+Mitigation of Bias - To address potential biases arising from imbalanced age groups in the dataset, re-sampling strategy to balance representation across key age groups.
+The age brackets are: Under 50, 50-59, 60-69, 70-79, and 80 and above. We set the 70-79 age group as the target size, serving as a baseline for balancing. The 60-69 group, which exceeded this size, was downsampled to reduce its representation, while the 80 and above group, which had fewer participants, was oversampled to increase its representation. This approach created a more uniform age distribution, improving fairness in the dataset.
 
