@@ -4,6 +4,7 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.utils.trigger_rule import TriggerRule
 import pandas as pd
 
 # Default arguments for the DAG
@@ -11,28 +12,9 @@ default_args = {
     'owner': 'airflow',
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
-    'on_failure_callback': lambda context: send_failure_email(context),  # Custom callback
+    
 }
 
-# Custom email function
-def send_failure_email(context):
-    subject = "Airflow Task Failure Alert"
-    body = f"Task {context['task_instance'].task_id} in DAG {context['task_instance'].dag_id} failed."
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['From'] = "mrudulaacharya18@gmail.com"  # Replace with your email
-    msg['To'] = "mrudulaacharya18@gmail.com"  # Replace with recipient email
-
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")
-            server.sendmail(msg['From'], [msg['To']], msg.as_string())
-            print("Failure alert email sent successfully.")
-    except Exception as e:
-        print(f"Error sending failure alert email: {e}")
-
-# Define the pipeline DAG
 dag = DAG(
     'data_pipeline_with_custom_email_alerts',
     default_args=default_args,
@@ -41,16 +23,45 @@ dag = DAG(
     start_date=datetime(2024, 1, 1),
     catchup=False,
 )
+# Custom email alert function
+def send_custom_alert_email(**context):
+    task_id = context['task_instance'].task_id
+    dag_id = context['task_instance'].dag_id
+    try_number = context['task_instance'].try_number
+    subject = f"Airflow Task Alert - Failure or Retry"
+    body = f"Task {task_id} in DAG {dag_id} has failed or retried (Attempt: {try_number})."
 
-# Your tasks here (same as in your original code)
-# Example Task 0a
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = "mrudulaacharya18@gmail.com"  # Replace with your email
+    msg['To'] = "mrudulaacharya18@gmail.com"   # Replace with the recipient email
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+            print("Alert email sent successfully.")
+    except Exception as e:
+        print(f"Error sending alert email: {e}")
+
+# Custom alert email task
+send_alert_task = PythonOperator(
+    task_id='send_custom_alert_email',
+    python_callable=send_custom_alert_email,
+    provide_context=True,
+    trigger_rule=TriggerRule.ONE_FAILED,  # Runs if any upstream task fails
+    dag=dag,
+)
+
+#
 
 
 # Define your function
 #Task 0a
 def participant_demographics_biospecimen_merged(**kwargs):
     # Load Participant_Status table
-    participant_status = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv')
+    #participant_status = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv')
 
     # Load Demographics table
     demographics = pd.read_csv('/home/mrudula/MLPOPS/data_raw/Demographics_27Oct2024.csv')
@@ -263,7 +274,6 @@ clean_preprocess_eda_task = PythonOperator(
     dag=dag,
 )
 
-# Repeat for motor_merged_task, load_and_merge_task, drop_columns_task, clean_preprocess_eda_task
 
 
-[merge_patient_demographics_task, motor_merged_task]  >> load_and_merge_task >> drop_columns_task >> clean_preprocess_eda_task 
+[merge_patient_demographics_task, motor_merged_task]  >> load_and_merge_task >> drop_columns_task >> clean_preprocess_eda_task >> send_alert_task
