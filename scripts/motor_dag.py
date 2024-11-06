@@ -154,31 +154,31 @@ with DAG('load_clean_merge_csvs',
     clean_motor_senses_1_task = PythonOperator(
         task_id='clean_motor_senses_1_task',
         python_callable=clean_motor_senses_1,
-        op_args=['{{ ti.xcom_pull(task_ids="load_csv_1_task") }}']
+        provide_context=True
     )
 
     clean_motor_senses_2_task = PythonOperator(
         task_id='clean_motor_senses_2_task',
         python_callable=clean_motor_senses_2,
-        op_args=['{{ ti.xcom_pull(task_ids="load_csv_2_task") }}']
+        provide_context=True
     )
 
     clean_motor_senses_3_task = PythonOperator(
         task_id='clean_motor_senses_3_task',
         python_callable=clean_motor_senses_3,
-        op_args=['{{ ti.xcom_pull(task_ids="load_csv_3_task") }}']
+        provide_context=True
     )
 
     clean_motor_senses_4_task = PythonOperator(
         task_id='clean_motor_senses_4_task',
         python_callable=clean_motor_senses_4,
-        op_args=['{{ ti.xcom_pull(task_ids="load_csv_4_task") }}']
+        provide_context=True
     )
 
     clean_motor_senses_5_task = PythonOperator(
         task_id='clean_motor_senses_5_task',
         python_callable=clean_motor_senses_5,
-        op_args=['{{ ti.xcom_pull(task_ids="load_csv_5_task") }}']
+        provide_context=True
     )
 
     # Merge task
