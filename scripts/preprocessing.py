@@ -1,6 +1,42 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
+from scipy import stats
+from sklearn.ensemble import IsolationForest
+
+
+def clean_outliers(df, columns=None, method='zscore', threshold=3):
+    df_clean = df.copy()
+    if columns is None:
+        columns = df.select_dtypes(include=[np.number]).columns
+
+    def zscore_method(data):
+        z_scores = np.abs(stats.zscore(data, nan_policy='omit'))
+        return z_scores < threshold
+
+    def iqr_method(data):
+        Q1 = data.quantile(0.25)
+        Q3 = data.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        return (data >= lower_bound) & (data <= upper_bound)
+
+    for column in columns:
+        if df_clean[column].dtype in [np.number]:
+            if method == 'zscore':
+                mask = zscore_method(df_clean[column])
+                df_clean.loc[~mask, column] = df_clean[column].median()
+            elif method == 'iqr':
+                mask = iqr_method(df_clean[column])
+                df_clean.loc[~mask, column] = df_clean[column].median()
+            elif method == 'isolation_forest':
+                iso_forest = IsolationForest(contamination=0.1, random_state=42)
+                yhat = iso_forest.fit_predict(df_clean[column].values.reshape(-1, 1))
+                mask = yhat != -1
+                df_clean.loc[~mask, column] = df_clean[column].median()
+    return df_clean
 
 # Function 1: Data Cleaning
 
@@ -21,9 +57,17 @@ def clean_data(df):
         elif df[col].dtype == 'object':
             # Fill categorical columns with mode
             df[col].fillna(df[col].mode()[0], inplace=True)
+
+    columns_to_treat = [
+        'ENROLL_AGE', 'NP3TOT', 'NP1DPRS', 'NP1ANXS', 'NP1FATG',
+        'NP2SPCH', 'NP2WALK', 'NP3GAIT', 'NP3BRADY'
+    ]
+
+    # Step 4: Treat outliers using clean_outliers function
+    df = clean_outliers(df, columns=columns_to_treat, method='isolation_forest')
     
     print("Data cleaning complete. Missing values handled and duplicates dropped.")
-    df.to_csv('cleaned_data.csv', index=False)
+    df.to_csv('/home/yutika/MLops_project/Parkinson-s-Prediction/scripts/cleaned_data.csv', index=False)
 
     return df
 
