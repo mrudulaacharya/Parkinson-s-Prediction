@@ -1,12 +1,6 @@
 # Introduction
 
-Parkinson’s disease is a neurodegenerative disorder with widely variable progression rates among patients, making accurate forecasting of symptom progression essential for early intervention and improved patient care. Leveraging data from the Parkinson’s Progression Markers Initiative (PPMI), this project aims to develop predictive models that can forecast disease progression over multiple patient assessments, ultimately supporting clinicians in making more personalized healthcare decisions. The primary goal of this project is to create a reliable, generalizable model that can predict progression in Parkinson’s disease using a combination of motor assessments, clinical data, and biomarkers. This multi-modal approach, combined with time-series modeling techniques, will allow for the prediction of key metrics such as Unified Parkinson’s Disease Rating Scale (UPDRS) scores across follow-up visits, aiding clinicians in crafting individualized care plans for patients at different stages of the disease.
-
-## Table of Contents
-- [Project Overview](#project-overview)
-- [Environment Setup](#environment-setup)
-- [Running the Pipeline](#running-the-pipeline)
-- [Code Structure](#code-structure)
+This project aims to predict Parkinson's disease using machine learning algorithms and MLOPS techniques. By analyzing biomedical data such as demographic attributes, motor skills, and other relevant biomarkers this model can assist in early identification of Parkinson's disease symptoms. Parkinson's disease is a progressive neurological disorder with no known cure, but early detection can significantly improve patient outcomes by enabling earlier interventions. Predictive models help in identifying the disease at an early stage when treatments can be more effective in managing symptoms, thereby improving the quality of life for affected individuals. This project supports healthcare professionals by providing a tool for early detection, which can aid in timely diagnosis and treatment planning. Additionally, it can be a valuable resource for researchers studying Parkinson's disease, potentially contributing to the discovery of new biomarkers or insights into disease progression. 
 
 
 ## Project Overview
@@ -33,7 +27,6 @@ To run this project, you need:
 
 ## Dataset
 
-## Code Structure 
 ## Project Folder Structure
 
 ```plaintext
@@ -75,6 +68,9 @@ Parkinsons-Prediction/
 
 - resampling.py : Categorizes participants into specified age groups, and balances the age distribution by under-sampling the '60-69' group and over-sampling the '80 and above' group to match the count of the '70-79' group.
 
+## Airflow DAG components
+
+
 
 ## Bias Detection and Mitigation
 ![1](https://github.com/user-attachments/assets/297ae311-24c7-4ad8-b4fd-77f18ef675d8)
@@ -88,3 +84,15 @@ In the age distribution histogram, the majority of participants fall between age
 The gender distribution bar chart shows a clear imbalance, with approximately 70% of participants identified as one gender, while only 30% represent the other. This disparity could cause the model to favor predictions for the overrepresented gender, leading to biased performance that may be less accurate for the minority gender.
 
 In the cohort distribution chart, one cohort comprises nearly 60% of the dataset, while other cohorts collectively represent the remaining 40%. Such an imbalance implies that the model may inadvertently learn patterns unique to the dominant cohort, resulting in reduced performance when predicting outcomes for less represented groups. Addressing these imbalances by enhancing the representation of underrepresented age groups, genders, and cohorts would help ensure that the model can learn fairly and perform consistently across all subgroups.
+
+For mitigating these biases we can apply the following techniques:
+
+1. Resampling: Apply oversampling to underrepresented age groups, gender, and cohorts to balance the dataset, or consider undersampling majority groups if data collection is limited.
+
+2. Sample Weights: Assign higher weights to samples from underrepresented age groups, genders, and cohorts in the model’s training process, ensuring that each group contributes equally to model learning.
+
+3. Stratified Splits: Use stratified sampling on ENROLL_AGE, SEX, and COHORT when dividing the dataset into training, validation, and test sets, maintaining balanced subgroup representation across all sets.
+
+4. Feature Engineering: Add new categorical features, such as age bins (e.g., <50, 50-60, etc.) or cohort identifiers, to guide the model in recognizing specific patterns tied to age and cohort.
+
+5. Bias and Fairness Metrics: During evaluation, check model performance metrics like accuracy and recall separately for each age group, gender, and cohort, and apply fairness metrics to detect and correct biases across these subgroups.
