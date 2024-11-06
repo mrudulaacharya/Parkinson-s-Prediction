@@ -61,11 +61,22 @@ def merge_all_motor_senses_csvs(**context):
     # Merge all DataFrames (concatenation along rows)
     merged_df = pd.concat(cleaned_dfs, axis=0)
     
-    # Save the merged DataFrame to a CSV file
-    merged_path = os.path.join(csv_directory, 'merged_file.csv')
-    merged_df.to_csv(merged_path, index=False)
+     # Push merged DataFrame to XCom
+    context['ti'].xcom_push(key='merged_df', value=merged_df)
+    print("Merged DataFrame pushed to XCom")
+
+def drop_duplicate__motor_senses_columns(**context):
+    # Retrieve merged DataFrame from XCom
+    merged_df = context['ti'].xcom_pull(key='merged_df', task_ids='merge_task')
     
-    print(f"Merged file saved at {merged_path}")
+    # Drop duplicate columns
+    deduped_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+    
+    # Save the deduplicated DataFrame
+    deduped_path = os.path.join(csv_directory, 'merged_deduped_file.csv')
+    deduped_df.to_csv(deduped_path, index=False)
+    
+    print(f"Deduplicated merged file saved at {deduped_path}")
 
 # Define the DAG
 with DAG('load_clean_merge_csvs',
@@ -137,10 +148,17 @@ with DAG('load_clean_merge_csvs',
         provide_context=True
     )
 
+    # Deduplication task that pulls merged DataFrame from XCom
+    deduplication_motor_senses_task = PythonOperator(
+        task_id='deduplication_motor_senses_task',
+        python_callable=drop_duplicate__motor_senses_columns,
+        provide_context=True
+    )
+
     # Define task dependencies
     # Load -> Clean -> Merge
     [load_motor_senses_1_task >> clean_motor_senses_1_task,
      load_motor_senses_2_task >> clean_motor_senses_2_task,
      load_motor_senses_3_task >> clean_motor_senses_3_task,
      load_motor_senses_4_task >> clean_motor_senses_4_task,
-     load_motor_senses_5_task >> clean_motor_senses_5_task] >> merge_task
+     load_motor_senses_5_task >> clean_motor_senses_5_task] >> merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
