@@ -1,10 +1,5 @@
-# Introduction
-
+# Project Overview
 This project aims to predict Parkinson's disease using machine learning algorithms and MLOPS techniques. By analyzing biomedical data such as demographic attributes, motor skills, and other relevant biomarkers this model can assist in early identification of Parkinson's disease symptoms. Parkinson's disease is a progressive neurological disorder with no known cure, but early detection can significantly improve patient outcomes by enabling earlier interventions. Predictive models help in identifying the disease at an early stage when treatments can be more effective in managing symptoms, thereby improving the quality of life for affected individuals. This project supports healthcare professionals by providing a tool for early detection, which can aid in timely diagnosis and treatment planning. Additionally, it can be a valuable resource for researchers studying Parkinson's disease, potentially contributing to the discovery of new biomarkers or insights into disease progression. 
-
-
-## Project Overview
-The aim of this project is to detect Parkinson's Disease using machine learning techniques. The pipeline includes data preprocessing, feature extraction, model training, evaluation, and bias detection and mitigation.
 
 ## Environment Setup
 python3 -m venv env
@@ -26,6 +21,7 @@ To run this project, you need:
    cd Parkinson-s-Prediction
 
 ## Dataset
+The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI) and comprises comprehensive biomedical data, including demographic details, motor assessments, and various biomarkers pertinent to Parkinson's disease.
 
 ## Project Folder Structure
 
