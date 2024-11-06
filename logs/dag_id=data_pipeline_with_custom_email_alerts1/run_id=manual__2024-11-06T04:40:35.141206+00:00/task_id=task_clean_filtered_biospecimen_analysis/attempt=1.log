@@ -1,0 +1,26 @@
+[2024-11-05T23:41:46.426-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.task_clean_filtered_biospecimen_analysis manual__2024-11-06T04:40:35.141206+00:00 [queued]>
+[2024-11-05T23:41:46.431-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.task_clean_filtered_biospecimen_analysis manual__2024-11-06T04:40:35.141206+00:00 [queued]>
+[2024-11-05T23:41:46.431-0500] {taskinstance.py:1361} INFO - Starting attempt 1 of 2
+[2024-11-05T23:41:46.550-0500] {taskinstance.py:1382} INFO - Executing <Task(PythonOperator): task_clean_filtered_biospecimen_analysis> on 2024-11-06 04:40:35.141206+00:00
+[2024-11-05T23:41:46.553-0500] {standard_task_runner.py:57} INFO - Started process 96061 to run task
+[2024-11-05T23:41:46.556-0500] {standard_task_runner.py:84} INFO - Running: ['airflow', 'tasks', 'run', 'data_pipeline_with_custom_email_alerts1', 'task_clean_filtered_biospecimen_analysis', 'manual__2024-11-06T04:40:35.141206+00:00', '--job-id', '580', '--raw', '--subdir', 'DAGS_FOLDER/try1.py', '--cfg-path', '/tmp/tmpcgvz8ooi']
+[2024-11-05T23:41:46.557-0500] {standard_task_runner.py:85} INFO - Job 580: Subtask task_clean_filtered_biospecimen_analysis
+[2024-11-05T23:41:46.678-0500] {task_command.py:416} INFO - Running <TaskInstance: data_pipeline_with_custom_email_alerts1.task_clean_filtered_biospecimen_analysis manual__2024-11-06T04:40:35.141206+00:00 [running]> on host mrudula-OMEN-by-HP-Laptop
+[2024-11-05T23:41:46.892-0500] {taskinstance.py:1662} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='airflow' AIRFLOW_CTX_DAG_ID='data_pipeline_with_custom_email_alerts1' AIRFLOW_CTX_TASK_ID='task_clean_filtered_biospecimen_analysis' AIRFLOW_CTX_EXECUTION_DATE='2024-11-06T04:40:35.141206+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2024-11-06T04:40:35.141206+00:00'
+[2024-11-05T23:41:47.042-0500] {python.py:194} INFO - Done. Returned value was:        PATNO                        SAAMethod  ...      SAA_Type InstrumentRep1
+0     245573  Amprion-24h alpha-synuclein-SAA  ...         Type1              2
+1     163324  Amprion-24h alpha-synuclein-SAA  ...         Type1              2
+2     250240  Amprion-24h alpha-synuclein-SAA  ...         Type1              2
+3     164985  Amprion-24h alpha-synuclein-SAA  ...         Type1              2
+4     245591  Amprion-24h alpha-synuclein-SAA  ...         Type1              2
+...      ...                              ...  ...           ...            ...
+1244  293703  Amprion-24h alpha-synuclein-SAA  ...  Undetermined              9
+1245  294102  Amprion-24h alpha-synuclein-SAA  ...         Type1              9
+1246  179752  Amprion-24h alpha-synuclein-SAA  ...          None              9
+1247  313702  Amprion-24h alpha-synuclein-SAA  ...         Type1              9
+1248  319735  Amprion-24h alpha-synuclein-SAA  ...         Type1             10
+
+[1249 rows x 5 columns]
+[2024-11-05T23:41:47.171-0500] {taskinstance.py:1400} INFO - Marking task as SUCCESS. dag_id=data_pipeline_with_custom_email_alerts1, task_id=task_clean_filtered_biospecimen_analysis, execution_date=20241106T044035, start_date=20241106T044146, end_date=20241106T044147
+[2024-11-05T23:41:47.329-0500] {local_task_job_runner.py:228} INFO - Task exited with return code 0
+[2024-11-05T23:41:47.345-0500] {taskinstance.py:2778} INFO - 1 downstream tasks scheduled from follow-on schedule check

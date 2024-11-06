@@ -1,0 +1,26 @@
+[2024-11-05T23:40:52.783-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.load_motor_senses_2_task manual__2024-11-06T04:40:35.141206+00:00 [queued]>
+[2024-11-05T23:40:52.787-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.load_motor_senses_2_task manual__2024-11-06T04:40:35.141206+00:00 [queued]>
+[2024-11-05T23:40:52.788-0500] {taskinstance.py:1361} INFO - Starting attempt 1 of 2
+[2024-11-05T23:40:52.907-0500] {taskinstance.py:1382} INFO - Executing <Task(PythonOperator): load_motor_senses_2_task> on 2024-11-06 04:40:35.141206+00:00
+[2024-11-05T23:40:52.911-0500] {standard_task_runner.py:57} INFO - Started process 95501 to run task
+[2024-11-05T23:40:52.914-0500] {standard_task_runner.py:84} INFO - Running: ['airflow', 'tasks', 'run', 'data_pipeline_with_custom_email_alerts1', 'load_motor_senses_2_task', 'manual__2024-11-06T04:40:35.141206+00:00', '--job-id', '563', '--raw', '--subdir', 'DAGS_FOLDER/try1.py', '--cfg-path', '/tmp/tmpmz8ebwsn']
+[2024-11-05T23:40:52.914-0500] {standard_task_runner.py:85} INFO - Job 563: Subtask load_motor_senses_2_task
+[2024-11-05T23:40:53.020-0500] {task_command.py:416} INFO - Running <TaskInstance: data_pipeline_with_custom_email_alerts1.load_motor_senses_2_task manual__2024-11-06T04:40:35.141206+00:00 [running]> on host mrudula-OMEN-by-HP-Laptop
+[2024-11-05T23:40:53.227-0500] {taskinstance.py:1662} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='airflow' AIRFLOW_CTX_DAG_ID='data_pipeline_with_custom_email_alerts1' AIRFLOW_CTX_TASK_ID='load_motor_senses_2_task' AIRFLOW_CTX_EXECUTION_DATE='2024-11-06T04:40:35.141206+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2024-11-06T04:40:35.141206+00:00'
+[2024-11-05T23:40:53.273-0500] {python.py:194} INFO - Done. Returned value was:           REC_ID   PATNO EVENT_ID  ... NP1PTOT ORIG_ENTRY            LAST_UPDATE
+0      272451501    3000       BL  ...     3.0    02/2011  2020-06-25 16:02:19.0
+1      338702301    3000      V04  ...     4.0    03/2012  2020-06-25 16:02:21.0
+2      385009201    3000      V06  ...     3.0    02/2013  2020-06-25 16:02:22.0
+3      437130801    3000      V08  ...     6.0    05/2014  2020-06-25 16:02:22.0
+4      512466901    3000      V10  ...     6.0    03/2015  2020-06-25 16:02:23.0
+...          ...     ...      ...  ...     ...        ...                    ...
+25800   IA594548  386466       BL  ...     1.0    10/2024  2024-10-15 00:00:00.0
+25801   IA602626  388122       BL  ...     1.0    10/2024  2024-10-23 00:00:00.0
+25802   IA593722  394809       BL  ...     5.0    10/2024  2024-10-10 00:00:00.0
+25803   IA593710  398222       BL  ...     9.0    10/2024  2024-10-10 00:00:00.0
+25804   IA603701  402314       BL  ...    10.0    10/2024  2024-10-24 00:00:00.0
+
+[25805 rows x 16 columns]
+[2024-11-05T23:40:53.471-0500] {taskinstance.py:1400} INFO - Marking task as SUCCESS. dag_id=data_pipeline_with_custom_email_alerts1, task_id=load_motor_senses_2_task, execution_date=20241106T044035, start_date=20241106T044052, end_date=20241106T044053
+[2024-11-05T23:40:53.606-0500] {local_task_job_runner.py:228} INFO - Task exited with return code 0
+[2024-11-05T23:40:53.635-0500] {taskinstance.py:2778} INFO - 1 downstream tasks scheduled from follow-on schedule check
