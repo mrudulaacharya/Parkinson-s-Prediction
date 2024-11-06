@@ -1,0 +1,26 @@
+[2024-11-05T21:18:59.189-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.task_merge_participantstatus_demographics_biospecimen_analysis manual__2024-11-06T02:18:14.408184+00:00 [queued]>
+[2024-11-05T21:18:59.194-0500] {taskinstance.py:1159} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: data_pipeline_with_custom_email_alerts1.task_merge_participantstatus_demographics_biospecimen_analysis manual__2024-11-06T02:18:14.408184+00:00 [queued]>
+[2024-11-05T21:18:59.194-0500] {taskinstance.py:1361} INFO - Starting attempt 1 of 2
+[2024-11-05T21:18:59.341-0500] {taskinstance.py:1382} INFO - Executing <Task(PythonOperator): task_merge_participantstatus_demographics_biospecimen_analysis> on 2024-11-06 02:18:14.408184+00:00
+[2024-11-05T21:18:59.346-0500] {standard_task_runner.py:57} INFO - Started process 65384 to run task
+[2024-11-05T21:18:59.349-0500] {standard_task_runner.py:84} INFO - Running: ['airflow', 'tasks', 'run', 'data_pipeline_with_custom_email_alerts1', 'task_merge_participantstatus_demographics_biospecimen_analysis', 'manual__2024-11-06T02:18:14.408184+00:00', '--job-id', '382', '--raw', '--subdir', 'DAGS_FOLDER/try1.py', '--cfg-path', '/tmp/tmpqxfc8c69']
+[2024-11-05T21:18:59.351-0500] {standard_task_runner.py:85} INFO - Job 382: Subtask task_merge_participantstatus_demographics_biospecimen_analysis
+[2024-11-05T21:18:59.458-0500] {task_command.py:416} INFO - Running <TaskInstance: data_pipeline_with_custom_email_alerts1.task_merge_participantstatus_demographics_biospecimen_analysis manual__2024-11-06T02:18:14.408184+00:00 [running]> on host mrudula-OMEN-by-HP-Laptop
+[2024-11-05T21:18:59.638-0500] {taskinstance.py:1662} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='airflow' AIRFLOW_CTX_DAG_ID='data_pipeline_with_custom_email_alerts1' AIRFLOW_CTX_TASK_ID='task_merge_participantstatus_demographics_biospecimen_analysis' AIRFLOW_CTX_EXECUTION_DATE='2024-11-06T02:18:14.408184+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2024-11-06T02:18:14.408184+00:00'
+[2024-11-05T21:18:59.669-0500] {taskinstance.py:1937} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/mrudula/airflow/lib/python3.10/site-packages/airflow/operators/python.py", line 192, in execute
+    return_value = self.execute_callable()
+  File "/home/mrudula/airflow/lib/python3.10/site-packages/airflow/operators/python.py", line 209, in execute_callable
+    return self.python_callable(*self.op_args, **self.op_kwargs)
+  File "/home/mrudula/airflow/dags/try1.py", line 145, in merge_biospecimen_with_participant
+    merged_data = merged_table = pd.merge(
+  File "/home/mrudula/airflow/lib/python3.10/site-packages/pandas/core/reshape/merge.py", line 153, in merge
+    right_df = _validate_operand(right)
+  File "/home/mrudula/airflow/lib/python3.10/site-packages/pandas/core/reshape/merge.py", line 2692, in _validate_operand
+    raise TypeError(
+TypeError: Can only merge Series or DataFrame objects, a <class 'NoneType'> was passed
+[2024-11-05T21:18:59.673-0500] {taskinstance.py:1400} INFO - Marking task as UP_FOR_RETRY. dag_id=data_pipeline_with_custom_email_alerts1, task_id=task_merge_participantstatus_demographics_biospecimen_analysis, execution_date=20241106T021814, start_date=20241106T021859, end_date=20241106T021859
+[2024-11-05T21:18:59.801-0500] {standard_task_runner.py:104} ERROR - Failed to execute job 382 for task task_merge_participantstatus_demographics_biospecimen_analysis (Can only merge Series or DataFrame objects, a <class 'NoneType'> was passed; 65384)
+[2024-11-05T21:18:59.842-0500] {local_task_job_runner.py:228} INFO - Task exited with return code 1
+[2024-11-05T21:19:00.104-0500] {taskinstance.py:2778} INFO - 0 downstream tasks scheduled from follow-on schedule check
