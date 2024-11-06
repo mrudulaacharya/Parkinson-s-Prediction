@@ -65,8 +65,8 @@ Parkinsons-Prediction/
 - resampling.py : Categorizes participants into specified age groups, and balances the age distribution by under-sampling the '60-69' group and over-sampling the '80 and above' group to match the count of the '70-79' group.
 
 ## Airflow DAG components
-
-
+![WhatsApp Image 2024-11-05 at 23 45 16_95809d38](https://github.com/user-attachments/assets/594b4ec5-9ee6-417f-8f67-6e16da2f5f2f)
+![WhatsApp Image 2024-11-05 at 23 43 29_8baaf474](https://github.com/user-attachments/assets/cccacb79-1bf9-4546-8728-4b093913605e)
 
 ## Bias Detection and Mitigation
 ![1](https://github.com/user-attachments/assets/297ae311-24c7-4ad8-b4fd-77f18ef675d8)
