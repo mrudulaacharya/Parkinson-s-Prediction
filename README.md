@@ -77,10 +77,14 @@ Parkinsons-Prediction/
 
 
 ## Bias Detection and Mitigation
+![1](https://github.com/user-attachments/assets/297ae311-24c7-4ad8-b4fd-77f18ef675d8)
+![2](https://github.com/user-attachments/assets/1d49c8f4-faed-42d4-847a-41b6bdf44dc1)
+![3](https://github.com/user-attachments/assets/e94069ca-dffc-4ef8-a931-b450374fa4e4)
 
-Detecting Bias - The dataset contains 136 columns, with a mix of numerical and text-based columns. To detect bias, we can start by examining the following columns that may represent demographic or categorical attributes:
+Based on the generated graphs, the dataset shows several notable imbalances across age, gender, and cohort attributes. 
 
-1) COHORT - Indicates participant groups, which might represent a categorical variable.
-2) ENROLL_AGE - Enrollment age, a continuous variable, which can be grouped into age brackets for analysis.
+In the age distribution histogram, the majority of participants fall between ages 60 and 75, with relatively few data points under 50 or over 80. This concentration suggests that younger and older age groups are underrepresented, which could lead the model to perform well only within the dominant age range (60-75) and struggle with age extremes, potentially limiting accuracy for outliers in age-sensitive applications.
 
-Mitigation of Bias - To address potential biases arising from imbalanced age groups in the dataset, re-sampling strategy was used to balance representation across key age groups. The age brackets are: Under 50, 50-59, 60-69, 70-79, and 80 and above. We set the 70-79 age group as the target size, serving as a baseline for balancing. The 60-69 group, which exceeded this size, was downsampled to reduce its representation, while the 80 and above group, which had fewer participants, was oversampled to increase its representation. This approach created a more uniform age distribution, improving fairness in the dataset.
+The gender distribution bar chart shows a clear imbalance, with approximately 70% of participants identified as one gender, while only 30% represent the other. This disparity could cause the model to favor predictions for the overrepresented gender, leading to biased performance that may be less accurate for the minority gender.
+
+In the cohort distribution chart, one cohort comprises nearly 60% of the dataset, while other cohorts collectively represent the remaining 40%. Such an imbalance implies that the model may inadvertently learn patterns unique to the dominant cohort, resulting in reduced performance when predicting outcomes for less represented groups. Addressing these imbalances by enhancing the representation of underrepresented age groups, genders, and cohorts would help ensure that the model can learn fairly and perform consistently across all subgroups.
