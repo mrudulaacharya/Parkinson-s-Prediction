@@ -27,6 +27,8 @@ dag = DAG(
 participant_status_path = '/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv'
 demographics_path = '/home/mrudula/MLPOPS/data_raw/Demographics_27Oct2024.csv'
 biospecimen_analysis_path = '/home/mrudula/MLPOPS/data_raw/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
+# Directory where CSV files are stored
+csv_directory = '/home/mrudula/MLPOPS/motor_senses/'
 
 # Custom email alert function
 def send_custom_alert_email(**context):
@@ -160,8 +162,157 @@ def merge_biospecimen_with_participant(**context):
 def clean_participantstatus_demographics_biospecimen_analysis(**context):
     merged_data = context['ti'].xcom_pull(task_ids='task_merge_participantstatus_demographics_biospecimen_analysis', key='merged_data')
     merged_data.drop(columns=['PATNO'], inplace=True)
-    
+    context['ti'].xcom_push(key='merged_data_cleaned', value=merged_data)
     return merged_data
+
+
+# Load functions for each CSV file
+def load_motor_senses_1(**context):
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
+
+def load_motor_senses_2(**context):
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
+
+def load_motor_senses_3(**context):
+    return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
+
+def load_motor_senses_4(**context):
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
+
+def load_motor_senses_5(**context):
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
+# Clean functions for each loaded CSV
+def clean_motor_senses_1(**context):
+    # Pull the DataFrame from XCom, making sure it's a DataFrame
+    df = context['ti'].xcom_pull(task_ids='load_motor_senses_1_task')
+
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+
+    # Drop specified columns and return the cleaned DataFrame
+    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1RTOT'])
+
+def clean_motor_senses_2(**context):
+    # Pull the DataFrame from XCom, making sure it's a DataFrame
+    df = context['ti'].xcom_pull(task_ids='load_motor_senses_2_task')
+
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+
+    # Drop specified columns and return the cleaned DataFrame
+    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1PTOT'])
+
+def clean_motor_senses_3(**context):
+    # Pull the DataFrame from XCom, making sure it's a DataFrame
+    df = context['ti'].xcom_pull(task_ids='load_motor_senses_3_task')
+
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+
+    # Drop specified columns and return the cleaned DataFrame
+    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP2PTOT'])
+
+def clean_motor_senses_4(**context):
+    # Pull the DataFrame from XCom, making sure it's a DataFrame
+    df = context['ti'].xcom_pull(task_ids='load_motor_senses_4_task')
+
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+
+    # Drop specified columns and return the cleaned DataFrame
+    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'])
+
+def clean_motor_senses_5(**context):
+    # Pull the DataFrame from XCom, making sure it's a DataFrame
+    df = context['ti'].xcom_pull(task_ids='load_motor_senses_5_task')
+
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+
+    # Drop specified columns and return the cleaned DataFrame
+    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP4TOT'])
+
+# Function to merge all cleaned CSVs
+def merge_all_motor_senses_csvs(**context):
+    # Pull cleaned DataFrames from XCom
+    cleaned_dfs = [
+        context['ti'].xcom_pull(task_ids='clean_motor_senses_1_task'),
+        context['ti'].xcom_pull(task_ids='clean_motor_senses_2_task'),
+        context['ti'].xcom_pull(task_ids='clean_motor_senses_3_task'),
+        context['ti'].xcom_pull(task_ids='clean_motor_senses_4_task'),
+        context['ti'].xcom_pull(task_ids='clean_motor_senses_5_task')
+    ]
+    
+    # Merge all DataFrames (concatenation along rows)
+    merged_df = pd.concat(cleaned_dfs, axis=0)
+    
+     # Push merged DataFrame to XCom
+    context['ti'].xcom_push(key='merged_df', value=merged_df)
+    print("Merged DataFrame pushed to XCom")
+
+def drop_duplicate_motor_senses_columns(**context):
+    # Retrieve merged DataFrame from XCom
+    merged_df = context['ti'].xcom_pull(key='merged_df', task_ids='merge_all_motor_senses_csvs_task')
+    
+    # Drop duplicate columns
+    deduped_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+    
+    # Save the deduplicated DataFrame
+    deduped_path = os.path.join(csv_directory, 'merged_deduped_file.csv')
+    deduped_df.to_csv(deduped_path, index=False)
+    context['ti'].xcom_push(key='deduped_df', value=deduped_df)
+    
+    print(f"Deduplicated merged file saved at {deduped_path}")
+
+
+def load_and_merge_data(**context):
+    participantstatus_demographics_biospecimen_merged_cleaned = context['ti'].xcom_pull(task_ids='task_clean_participantstatus_demographics_biospecimen_analysis', key='merged_data_cleaned')
+    motor_senses_merged_cleaned= context['ti'].xcom_pull(task_ids='deduplication_motor_senses_task',key='deduped_df')
+
+    # # Load the merged files from both tasks
+    # df_participant = pd.read_csv(participant_path)
+    # df_motor = pd.read_csv(motor_path)
+    
+
+    # Perform the merging operation
+    merged_df_final = pd.merge(
+        participantstatus_demographics_biospecimen_merged_cleaned,
+        motor_senses_merged_cleaned,
+        left_on="Participant_ID",
+        right_on="PATNO",
+        how='inner'
+    )
+    context['ti'].xcom_push(key='merged_final', value=merged_df_final)
+    output_path = '/home/mrudula/MLPOPS/merged_data/merged_data_output.csv'
+    
+    return merged_df_final
+load_and_merge_data
+# Task 3: Data cleaning, preprocessing, and EDA
+def clean_preprocess_eda(**context):
+    data_final= context['ti'].xcom_pull(task_ids='load_and_merge_data',key='merged_final')     
+
+    # Data Cleaning
+    data_final = data_final.drop_duplicates()
+    drop_threshold = 0.4 * len(data_final)
+    missing_values = data_final.isnull().sum()
+    columns_to_drop = missing_values[missing_values > drop_threshold].index.tolist()
+    data_final = data_final.drop(columns=columns_to_drop)
+    for col in data_final.columns:
+        if data_final[col].dtype in ['float64', 'int64']:
+            data_final[col].fillna(int(data_final[col].mean()), inplace=True)
+        elif data_final[col].dtype == 'object':
+            data_final[col].fillna(data_final[col].mode()[0], inplace=True)
+    data_final.to_csv('/home/mrudula/MLPOPS/cleaned_data.csv', index=False)    
+
+    # Check for irregularities
+    if data_final.isnull().any().any():
+        raise ValueError("Data irregularities detected: missing values present")
+    return data_final
 
 # Task 0: Load participant status
 task_participant_status_load = PythonOperator(
@@ -268,6 +419,105 @@ task_send_alert_email = PythonOperator(
     trigger_rule=TriggerRule.ONE_FAILED,
     dag=dag,
 )
+# Load tasks
+load_motor_senses_1_task = PythonOperator(
+    task_id='load_motor_senses_1_task',
+    python_callable=load_motor_senses_1,
+    provide_context=True,
+    dag=dag,
+)
+
+load_motor_senses_2_task = PythonOperator(
+    task_id='load_motor_senses_2_task',
+    python_callable=load_motor_senses_2,
+    provide_context=True,
+    dag=dag,
+)
+
+load_motor_senses_3_task = PythonOperator(
+    task_id='load_motor_senses_3_task',
+    python_callable=load_motor_senses_3,
+    provide_context=True,
+    dag=dag,
+)
+
+load_motor_senses_4_task = PythonOperator(
+    task_id='load_motor_senses_4_task',
+    python_callable=load_motor_senses_4,
+    provide_context=True,
+    dag=dag,
+)
+
+load_motor_senses_5_task = PythonOperator(
+    task_id='load_motor_senses_5_task',
+    python_callable=load_motor_senses_5,
+    provide_context=True,
+    dag=dag,
+)
+
+# Clean tasks
+clean_motor_senses_1_task = PythonOperator(
+    task_id='clean_motor_senses_1_task',
+    python_callable=clean_motor_senses_1,
+    provide_context=True,
+    dag=dag,
+)
+
+clean_motor_senses_2_task = PythonOperator(
+    task_id='clean_motor_senses_2_task',
+    python_callable=clean_motor_senses_2,
+    provide_context=True,
+    dag=dag,
+)
+
+clean_motor_senses_3_task = PythonOperator(
+    task_id='clean_motor_senses_3_task',
+    python_callable=clean_motor_senses_3,
+    provide_context=True,
+    dag=dag,
+)
+
+clean_motor_senses_4_task = PythonOperator(
+    task_id='clean_motor_senses_4_task',
+    python_callable=clean_motor_senses_4,
+    provide_context=True,
+    dag=dag,
+)
+
+clean_motor_senses_5_task = PythonOperator(
+    task_id='clean_motor_senses_5_task',
+    python_callable=clean_motor_senses_5,
+    provide_context=True,
+    dag=dag,
+)
+
+# Merge task
+merge_all_motor_senses_csvs_task = PythonOperator(
+    task_id='merge_all_motor_senses_csvs_task',
+    python_callable=merge_all_motor_senses_csvs,
+    provide_context=True,
+    dag=dag,
+)
+
+# Deduplication task that pulls merged DataFrame from XCom
+deduplication_motor_senses_task = PythonOperator(
+    task_id='deduplication_motor_senses_task',
+    python_callable=drop_duplicate_motor_senses_columns,
+    provide_context=True,
+    dag=dag,
+)
+load_and_merge_task = PythonOperator(
+    task_id='load_and_merge_data',
+    python_callable=load_and_merge_data,
+    provide_context=True,
+    dag=dag,
+)
+clean_preprocess_eda_task = PythonOperator(
+    task_id='clean_preprocess_eda',
+    python_callable=clean_preprocess_eda,
+    provide_context=True,
+    dag=dag,
+)
 
 # Setting the task dependencies
 task_participant_status_load >> task_clean_participant_status
@@ -276,4 +526,11 @@ task_demographics_load >> task_clean_demographics
 
 task_biospecimen_analysis_load >> task_clean_biospecimen_analysis >> task_filter_biospecimen_analysis >> task_clean_filtered_biospecimen_analysis
 
-[task_clean_filtered_biospecimen_analysis, task_clean_participantstatus_demographic] >> task_merge_participantstatus_demographics_biospecimen_analysis >> task_clean_participantstatus_demographics_biospecimen_analysis >> task_send_alert_email
+[task_clean_filtered_biospecimen_analysis, task_clean_participantstatus_demographic] >> task_merge_participantstatus_demographics_biospecimen_analysis >> task_clean_participantstatus_demographics_biospecimen_analysis 
+load_motor_senses_1_task >> clean_motor_senses_1_task
+load_motor_senses_2_task >> clean_motor_senses_2_task
+load_motor_senses_3_task >> clean_motor_senses_3_task
+load_motor_senses_4_task >> clean_motor_senses_4_task
+load_motor_senses_5_task >> clean_motor_senses_5_task
+[clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>clean_preprocess_eda_task>>task_send_alert_email
