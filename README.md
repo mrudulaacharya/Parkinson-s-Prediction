@@ -28,41 +28,78 @@ The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI
 ```plaintext
 Parkinsons-Prediction/
 ├── README.md                     # Project documentation
-├── data/                         # Folder for datasets
-   ├── cleaned_data.csv           # Raw, unprocessed data 
+├── data/                         # Folder for datasets 
 ├── scripts/                      # Scripts for data handling and preprocessing
-   ├── DataProfiling.ipynb        # Data profiling notebook
-   ├── clean_outlier.py           # Script to clean outliers
-   ├── correlation.py             # Script for correlation analysis
-   ├── data_merging.ipynb         # Notebook for data merging
-   ├── data_schema.ipynb          # Notebook for defining data schema
-   ├── drop_columns.py            # Script to drop unnecessary columns
-   ├── duplicates_handler.py      # Script to handle duplicate data
-   ├── merge_data.py              # Script to merge datasets
-   ├── missing_values_handler.py  # Script to handle missing values
-   ├── preprocessing.py           # General preprocessing script
-   └── resampling.py              # Script for data resampling
+│   ├── Correlation.ipynb         # Notebook for correlation analysis
+│   ├── DataProfiling.ipynb       # Data profiling notebook
+│   ├── bias_analysis.ipynb       # Notebook for bias analysis
+│   ├── data_merging.ipynb        # Notebook for data merging
+│   ├── data_schema.ipynb         # Notebook for defining data schema
+│   ├── merge_data.py             # Script to merge datasets
+│   ├── motor_dag.py              # DAG script for motor skills data processing
+│   ├── motorsenses.ipynb         # Notebook for motor senses analysis
+│   ├── participantstatus_demographics_biospecimen_dag.py # DAG script for participant status, demographics, and biospecimen
+│   ├── pca.py                    # Script for principal component analysis
+│   ├── preprocessing.py          # General preprocessing script
+│   └── resampling.py             # Script for data resampling
+├── dags/                         # DAGs for scheduling and automation
+│   └── data_pipeline_new.py      # New data pipeline DAG script
+├── logs/                         # Folder for logs
 ├── requirements.txt              # Dependencies and libraries
 └── tests/                        # Test scripts
-   ├── __init__.py                # Init file for test package
-   ├── test_duplicate.py          # Unit test for handling duplicates
-   ├── test_missing_value.py      # Unit test for handling missing values
-   ├── test_outlier.py            # Unit test for outlier cleaning
-   └── test_resampling.py         # Unit test for data resampling
+    ├── __init__.py               # Init file for test package
+    ├── test_duplicate.py         # Unit test for handling duplicates
+    ├── test_missing_value.py     # Unit test for handling missing values
+    ├── test_outlier.py           # Unit test for outlier cleaning
+    └── test_resampling.py        # Unit test for data resampling
 
 ```
 
-## Code Explanations
-
-- merge_data.py : Iterates through all CSV files in a specified directory, loads each file into a pandas DataFrame, and stores them in a list. It then merges these DataFrames on the common column PATNO using an inner join, resulting in a single merged DataFrame.
-
-- drop_columns.py : Drops columns that seem irrelevant to the prediction of target : 'COHORT'
-
-- preprocessing.py: This script performs data cleaning, preprocessing, and exploratory data analysis (EDA) on a dataset. It cleans the data by handling duplicates and missing values, preprocesses it by converting date columns and encoding categorical variables, and visualizes distributions for specific columns like ENROLL_AGE, SEX, and COHORT.
-
-- correlation.py : Loads a CSV file into a DataFrame, selects only the numeric columns, and calculates the correlation matrix for these columns. It then visualizes the correlation matrix as a heatmap without annotation, showing the strength of relationships between numerical features in the dataset.
-
-- resampling.py : Categorizes participants into specified age groups, and balances the age distribution by under-sampling the '60-69' group and over-sampling the '80 and above' group to match the count of the '70-79' group.
+## Description of the Data Pipeline Components:
+• send_custom_alert_email: Sends a custom alert email if a task fails or is retried, with 
+details about the task and DAG. 
+• participant_status_load: Loads the "Participant_Status" CSV file into a DataFrame. 
+• demographics_load: Loads the "Demographics" CSV file into a DataFrame. 
+• clean_participant_status: Cleans the "Participant_Status" DataFrame by converting 
+enrollment dates, renaming a column, and dropping unnecessary columns. 
+• clean_demographics: Cleans the "Demographics" DataFrame by dropping columns that 
+are not needed. 
+• merge_participant_status_and_demographics: Merges the cleaned 
+"Participant_Status" and "Demographics" DataFrames on the participant ID and filters 
+rows with valid enrollment statuses. 
+• clean_participantstatus_demographic: Further cleans the merged "Participant_Status" 
+and "Demographics" DataFrame by dropping additional unnecessary columns. 
+• biospecimen_analysis_load: Loads the "SAA_Biospecimen_Analysis_Results" CSV file 
+into a DataFrame. 
+• clean_biospecimen_analysis: Cleans the "Biospecimen_Analysis" DataFrame by 
+formatting dates and dropping irrelevant columns. 
+• filter_biospecimen_analysis: Filters the "Biospecimen_Analysis" DataFrame to keep 
+only records with the earliest run date for baseline clinical events. 
+• clean_filtered_biospecimen_analysis: Further cleans the filtered 
+"Biospecimen_Analysis" DataFrame by dropping additional columns. 
+• merge_participantstatus_demographics_biospecimen_analysis: Merges the cleaned 
+"Participant_Status", "Demographics", and "Biospecimen_Analysis" DataFrames. 
+• clean_participantstatus_demographics_biospecimen_analysis: Final cleanup of the 
+merged DataFrame by dropping remaining unnecessary columns. 
+• load_motor_senses_1: Loads the first motor senses CSV file into a DataFrame. 
+• load_motor_senses_2: Loads the second motor senses CSV file into a DataFrame. 
+• load_motor_senses_3: Loads the third motor senses CSV file into a DataFrame. 
+• load_motor_senses_4: Loads the fourth motor senses CSV file into a DataFrame. 
+• load_motor_senses_5: Loads the fifth motor senses CSV file into a DataFrame. 
+• clean_motor_senses_1: Cleans the first motor senses DataFrame by dropping 
+unnecessary columns after retrieving it from XCom. 
+• clean_motor_senses_2: Cleans the second motor senses DataFrame by dropping 
+unnecessary columns after retrieving it from XCom. 
+• clean_motor_senses_3: Cleans the third motor senses DataFrame by dropping 
+unnecessary columns after retrieving it from XCom. 
+• clean_motor_senses_4: Cleans the fourth motor senses DataFrame by dropping 
+unnecessary columns after retrieving it from XCom. 
+• clean_motor_senses_5: Cleans the fifth motor senses DataFrame by dropping 
+unnecessary columns after retrieving it from XCom. 
+• merge_all_motor_senses_csvs: Merges all cleaned motor senses DataFrames into a 
+single DataFrame and pushes the merged DataFrame to XCom. 
+• drop_duplicate_motor_senses_columns: Removes duplicate columns from the merged 
+DataFrame and saves the final deduplicated DataFrame to a CSV file.
 
 ## Airflow DAG components
 ![WhatsApp Image 2024-11-05 at 23 45 16_95809d38](https://github.com/user-attachments/assets/594b4ec5-9ee6-417f-8f67-6e16da2f5f2f)
