@@ -6,7 +6,10 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import pandas as pd
-
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
 # Default arguments for the DAG
 default_args = {
     'owner': 'airflow',
@@ -88,7 +91,7 @@ def merge_participant_status_and_demographics(**context):
         demographics,
         left_on="Participant_ID",
         right_on="PATNO",
-        suffixes=("", "_drop")
+        suffixes='outer'
     )
     valid_statuses = ['Enrolled', 'Complete', 'Withdrew']
     combined_table = combined_table[combined_table['ENROLL_STATUS'].isin(valid_statuses)]
@@ -248,19 +251,38 @@ def merge_all_motor_senses_csvs(**context):
         context['ti'].xcom_pull(task_ids='clean_motor_senses_5_task')
     ]
     
-    # Merge all DataFrames (concatenation along rows)
-    merged_df = pd.concat(cleaned_dfs, axis=0)
     
      # Push merged DataFrame to XCom
-    context['ti'].xcom_push(key='merged_df', value=merged_df)
+    context['ti'].xcom_push(key='cleaned_df', value=cleaned_dfs)
     print("Merged DataFrame pushed to XCom")
+
+
+def filter_all_motor_senses_csvs(**context):
+    cleaned_dfs = context['ti'].xcom_pull(key='cleaned_dfs', task_ids='merge_all_motor_senses_csvs_task')
+    
+    if not cleaned_dfs:
+        raise ValueError("No cleaned DataFrames retrieved from XCom for filtering.")
+    
+    # Start with the first DataFrame
+    merged_df = cleaned_dfs[0]
+    
+    # Perform the merge with outer join
+    for df in cleaned_dfs[1:]:
+        merged_df = merged_df.merge(df, on='PATNO', how='outer', suffixes=('', '_dup'))
+    
+    # Push the merged DataFrame to XCom
+    context['ti'].xcom_push(key='filter_merged_df', value=merged_df)
+    print("Filtering done and merged DataFrame pushed to XCom!")
+    
+
 
 def drop_duplicate_motor_senses_columns(**context):
     # Retrieve merged DataFrame from XCom
-    merged_df = context['ti'].xcom_pull(key='merged_df', task_ids='merge_all_motor_senses_csvs_task')
+    merged_df = context['ti'].xcom_pull(key='filter_merged_df', task_ids='filter_all_motor_senses_csvs_task')
     
     # Drop duplicate columns
     deduped_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+    deduped_df=deduped_df.drop(columns=['EVENT_ID','EVENT_ID_dup','NUPSOURC_dup'],inplace=True)
     
     # Save the deduplicated DataFrame
     deduped_path = os.path.join(csv_directory, 'merged_deduped_file.csv')
@@ -288,7 +310,7 @@ def load_and_merge_data(**context):
         how='inner'
     )
     context['ti'].xcom_push(key='merged_final', value=merged_df_final)
-    output_path = '/home/mrudula/MLPOPS/merged_data/merged_data_output.csv'
+    
     
     return merged_df_final
 load_and_merge_data
@@ -297,8 +319,10 @@ def clean_preprocess_eda(**context):
     data_final= context['ti'].xcom_pull(task_ids='load_and_merge_data',key='merged_final')     
 
     # Data Cleaning
+
     data_final = data_final.drop_duplicates()
-    drop_threshold = 0.4 * len(data_final)
+    data_final=data_final.drop(columns=['PATNO'],inplace=True)
+    drop_threshold = 1 * len(data_final)
     missing_values = data_final.isnull().sum()
     columns_to_drop = missing_values[missing_values > drop_threshold].index.tolist()
     data_final = data_final.drop(columns=columns_to_drop)
@@ -312,7 +336,73 @@ def clean_preprocess_eda(**context):
     # Check for irregularities
     if data_final.isnull().any().any():
         raise ValueError("Data irregularities detected: missing values present")
+    context['ti'].xcom_push(key='cleaned_merge_final', value=data_final)
+    
     return data_final
+
+def feature_engineering_PCA(**context):
+    # Load your dataset
+    data = context['ti'].xcom_pull(task_ids='clean_preprocess_eda', key='cleaned_merge_final') 
+    if data.isnull().any().any():
+        raise ValueError("Data irregularities detected: missing values present")
+    # Label Encoding for `SAAMethod`
+    label_encoder = LabelEncoder()
+    data['SAAMethod'] = label_encoder.fit_transform(data['SAAMethod'])
+
+    # One-Hot Encoding for `SAA_Status` and `SAA_Type`
+    data_encoded = pd.get_dummies(data, columns=['SAA_Status', 'SAA_Type'])
+
+    # View the encoded DataFrame to confirm
+    print(data_encoded.head())
+
+    # Separate features and target variable
+    X = data_encoded.drop(columns=['COHORT'])  # replace 'target_column' with your target column name
+
+    # Standardize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Initialize PCA without specifying the number of components to preserve
+    pca = PCA(n_components=None)  # Automatically retain all components
+    X_pca = pca.fit_transform(X_scaled)
+
+    # Calculate cumulative explained variance ratio
+    cumulative_explained_variance = np.cumsum(pca.explained_variance_ratio_)
+    
+    # Find the number of components that explain up to 85% variance
+    num_components = np.argmax(cumulative_explained_variance >= 0.85) + 1
+    
+    # Keep the first `num_components` components
+    X_pca_reduced = X_pca[:, :num_components]
+
+    # Check the explained variance ratio for the reduced components
+    print("PCA Result (Reduced to 85% variance):\n", X_pca_reduced)
+    print("Explained Variance Ratio:", pca.explained_variance_ratio_[:num_components])
+    print("Cumulative Explained Variance:", cumulative_explained_variance[:num_components])
+
+    # Generate column names dynamically for the reduced components
+    column_names = [f'PC{i+1}' for i in range(num_components)]
+
+    # Create the DataFrame with dynamically generated column names
+    pca_df = pd.DataFrame(X_pca_reduced, columns=column_names)
+
+    # View the DataFrame to confirm
+    print(pca_df.head())
+
+    # Save to CSV
+    pca_df.to_csv('/home/mrudula/MLPOPS/outputs/pca_components_reduced.csv', index=False)
+
+    print("Principal components (up to 85% variance) saved to 'pca_components_reduced.csv'")
+
+    # Convert to DataFrame with component labels
+    explained_variance_df = pd.DataFrame({
+        'Principal Component': [f'PC{i+1}' for i in range(len(pca.explained_variance_ratio_[:num_components]))],
+        'Explained Variance Ratio': pca.explained_variance_ratio_[:num_components]
+    })
+    print(explained_variance_df)
+
+
+
 
 # Task 0: Load participant status
 task_participant_status_load = PythonOperator(
@@ -498,6 +588,14 @@ merge_all_motor_senses_csvs_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
+#Filter task
+filter_all_motor_senses_csvs_task = PythonOperator(
+    task_id='filter_all_motor_senses_csvs_task',
+    python_callable=filter_all_motor_senses_csvs,
+    provide_context=True,
+    dag=dag,
+)
+
 
 # Deduplication task that pulls merged DataFrame from XCom
 deduplication_motor_senses_task = PythonOperator(
@@ -518,6 +616,13 @@ clean_preprocess_eda_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
+feature_engineering_PCA_task=PythonOperator(
+    task_id='feature_engineering_PCA',
+    python_callable = feature_engineering_PCA,
+    provide_context=True,
+    dag=dag,
+
+)
 
 # Setting the task dependencies
 task_participant_status_load >> task_clean_participant_status
@@ -532,5 +637,5 @@ load_motor_senses_2_task >> clean_motor_senses_2_task
 load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
-[clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>clean_preprocess_eda_task>>task_send_alert_email
+[clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>merge_all_motor_senses_csvs_task >> filter_all_motor_senses_csvs_task>>deduplication_motor_senses_task
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>clean_preprocess_eda_task>>feature_engineering_PCA_task >>task_send_alert_email
