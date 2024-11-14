@@ -122,6 +122,12 @@ def clean_participantstatus_demographics_biospecimen_analysis(merged_table):
     return merged_table
 
 # Define the Airflow DAG
+motor_merged_task = PythonOperator(
+    task_id='motor_merged',
+    python_callable=motor_merged,
+    provide_context=True,
+    dag=dag,
+)
 with DAG(
     dag_id="data_pipeline_with_custom_email_alerts",
     default_args=default_args,
