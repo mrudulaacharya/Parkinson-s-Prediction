@@ -7,9 +7,13 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import pandas as pd
 import numpy as np
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+
 # Default arguments for the DAG
 default_args = {
     'owner': 'airflow',
@@ -18,7 +22,7 @@ default_args = {
 }
 
 dag = DAG(
-    'data_pipeline_with_custom_email_alerts1',
+    'data_pipeline_with_custom_email_alert_no_fe',
     default_args=default_args,
     description='Data pipeline with custom email alerts for task failures',
     schedule_interval=timedelta(days=1),
@@ -91,7 +95,7 @@ def merge_participant_status_and_demographics(**context):
         demographics,
         left_on="Participant_ID",
         right_on="PATNO",
-        suffixes='outer'
+        suffixes=("", "_drop")
     )
     valid_statuses = ['Enrolled', 'Complete', 'Withdrew']
     combined_table = combined_table[combined_table['ENROLL_STATUS'].isin(valid_statuses)]
@@ -120,24 +124,24 @@ def clean_biospecimen_analysis(**context):
 
 def filter_biospecimen_analysis(**context):
     biospecimen_analysis = context['ti'].xcom_pull(task_ids='task_clean_biospecimen_analysis', key='cleaned_biospecimen_analysis')
-    earliest_records = (
-        biospecimen_analysis[biospecimen_analysis['CLINICAL_EVENT'] == 'BL']
-        .groupby('PATNO', as_index=False)
-        .agg(earliest_date=('RUNDATE', 'min'))
-    )
-    biospecimen_analysis_cleaned = pd.merge(
-        biospecimen_analysis,
-        earliest_records,
-        left_on=['PATNO', 'RUNDATE'],
-        right_on=['PATNO', 'earliest_date'],
-        how='inner'
-    )
+    
+    bl_events = biospecimen_analysis[biospecimen_analysis['CLINICAL_EVENT'] == 'BL']
+
+    # Step 2: Convert 'RUNDATE' to datetime if it's not already in datetime format
+    bl_events['RUNDATE'] = pd.to_datetime(bl_events['RUNDATE'])  # Adjust format if necessary
+
+    # Step 3: Sort the filtered DataFrame by PATNO and RUNDATE to ensure chronological order
+    bl_events_sorted = bl_events.sort_values(by=['PATNO', 'RUNDATE'])
+
+    # Step 4: Drop duplicates based on 'PATNO', keeping the first (earliest) occurrence
+    biospecimen_analysis_cleaned = bl_events_sorted.drop_duplicates(subset='PATNO', keep='first')
+
     context['ti'].xcom_push(key='filtered_biospecimen_analysis', value=biospecimen_analysis_cleaned)
     return biospecimen_analysis_cleaned
 
 def clean_filtered_biospecimen_analysis(**context):
     biospecimen_analysis_cleaned = context['ti'].xcom_pull(task_ids='task_filter_biospecimen_analysis', key='filtered_biospecimen_analysis')
-    columns_to_drop = ['CLINICAL_EVENT','RUNDATE','earliest_date']
+    columns_to_drop = ['CLINICAL_EVENT','RUNDATE']
     biospecimen_analysis_cleaned.drop(columns=columns_to_drop, inplace=True)
     context['ti'].xcom_push(key='cleaned_filtered_biospecimen_analysis', value=biospecimen_analysis_cleaned)
     return biospecimen_analysis_cleaned
@@ -166,6 +170,7 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
     merged_data = context['ti'].xcom_pull(task_ids='task_merge_participantstatus_demographics_biospecimen_analysis', key='merged_data')
     merged_data.drop(columns=['PATNO'], inplace=True)
     context['ti'].xcom_push(key='merged_data_cleaned', value=merged_data)
+    merged_data.to_csv('/home/mrudula/MLPOPS/outputs/patient_demographics_biospecimen.csv', index=False)
     return merged_data
 
 
@@ -192,10 +197,16 @@ def clean_motor_senses_1(**context):
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
+    
+    
+    df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP1RTOT'],inplace=True)
+
+    #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1RTOT'],inplace=True)
+
+    context['ti'].xcom_push(key='cleaned_1', value=df)
 
     # Drop specified columns and return the cleaned DataFrame
-    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1RTOT'])
-
+    return df
 def clean_motor_senses_2(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
     df = context['ti'].xcom_pull(task_ids='load_motor_senses_2_task')
@@ -203,10 +214,11 @@ def clean_motor_senses_2(**context):
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
-
+    df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP1PTOT'],inplace=True)
+    #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1PTOT'],inplace=True)
+    context['ti'].xcom_push(key='cleaned_2', value=df)
     # Drop specified columns and return the cleaned DataFrame
-    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1PTOT'])
-
+    return df
 def clean_motor_senses_3(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
     df = context['ti'].xcom_pull(task_ids='load_motor_senses_3_task')
@@ -216,8 +228,12 @@ def clean_motor_senses_3(**context):
         df = pd.read_json(df)
 
     # Drop specified columns and return the cleaned DataFrame
-    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP2PTOT'])
 
+    df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP2PTOT'],inplace=True)
+    #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP2PTOT'],inplace=True)
+
+    context['ti'].xcom_push(key='cleaned_3', value=df)
+    return df
 def clean_motor_senses_4(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
     df = context['ti'].xcom_pull(task_ids='load_motor_senses_4_task')
@@ -225,9 +241,13 @@ def clean_motor_senses_4(**context):
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
+    df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'],inplace=True)
+    #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'],inplace=True)
 
+
+    context['ti'].xcom_push(key='cleaned_4', value=df)
     # Drop specified columns and return the cleaned DataFrame
-    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'])
+    return df
 
 def clean_motor_senses_5(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
@@ -236,172 +256,254 @@ def clean_motor_senses_5(**context):
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
+    #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP4TOT'],inplace=True)
+    df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP4TOT'],inplace=True)
 
+    context['ti'].xcom_push(key='cleaned_5', value=df)
     # Drop specified columns and return the cleaned DataFrame
-    return df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP4TOT'])
-
+    return df
 # Function to merge all cleaned CSVs
-def merge_all_motor_senses_csvs(**context):
+def filter_all_motor_senses_csvs(**context):
     # Pull cleaned DataFrames from XCom
     cleaned_dfs = [
-        context['ti'].xcom_pull(task_ids='clean_motor_senses_1_task'),
-        context['ti'].xcom_pull(task_ids='clean_motor_senses_2_task'),
-        context['ti'].xcom_pull(task_ids='clean_motor_senses_3_task'),
-        context['ti'].xcom_pull(task_ids='clean_motor_senses_4_task'),
-        context['ti'].xcom_pull(task_ids='clean_motor_senses_5_task')
+        context['ti'].xcom_pull(key='cleaned_1',task_ids='clean_motor_senses_1_task'),
+        context['ti'].xcom_pull(key='cleaned_2',task_ids='clean_motor_senses_2_task'),
+        context['ti'].xcom_pull(key='cleaned_3',task_ids='clean_motor_senses_3_task'),
+        context['ti'].xcom_pull(key='cleaned_4',task_ids='clean_motor_senses_4_task'),
+        context['ti'].xcom_pull(key='cleaned_5',task_ids='clean_motor_senses_5_task')
     ]
+    #filtered_dfs = [df[df['EVENT_ID'].isin(['BL', 'PW', 'SC', 'ST'])] for df in cleaned_dfs]
     
+    # Define a function to clean each DataFrame
+    def clean_df(df):
+        # Step 1: Convert ORIG_ENTRY to datetime format
+        df['ORIG_ENTRY'] = pd.to_datetime(df['ORIG_ENTRY'], format='%m/%Y')
+        
+        # Step 3: Sort by PATNO and ORIG_ENTRY
+        df = df.sort_values(by=['PATNO', 'ORIG_ENTRY'])
+        
+        # Step 4: Drop duplicates based on PATNO, keeping the first occurrence (earliest date)
+        df = df.drop_duplicates(subset=['PATNO'], keep='first')
+
+        df.drop(columns=['ORIG_ENTRY'], inplace=True)
+        
+        return df
     
-     # Push merged DataFrame to XCom
-    context['ti'].xcom_push(key='cleaned_df', value=cleaned_dfs)
+    # Apply cleaning function to each DataFrame
+    filtered_dfs = [clean_df(df) for df in cleaned_dfs]
+    context['ti'].xcom_push(key='filtered_dfs', value=filtered_dfs)
     print("Merged DataFrame pushed to XCom")
 
 
-def filter_all_motor_senses_csvs(**context):
-    cleaned_dfs = context['ti'].xcom_pull(key='cleaned_dfs', task_ids='merge_all_motor_senses_csvs_task')
+def merge_all_motor_senses_csvs(**context):
+    cleaned_dfs = context['ti'].xcom_pull(key='filtered_dfs', task_ids='filter_all_motor_senses_csvs_task')
     
     if not cleaned_dfs:
         raise ValueError("No cleaned DataFrames retrieved from XCom for filtering.")
     
     # Start with the first DataFrame
-    merged_df = cleaned_dfs[0]
+    merged_df = cleaned_dfs[0]    
     
     # Perform the merge with outer join
     for df in cleaned_dfs[1:]:
         merged_df = merged_df.merge(df, on='PATNO', how='outer', suffixes=('', '_dup'))
+    # Dropping duplicate columns created during merging
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
     
     # Push the merged DataFrame to XCom
     context['ti'].xcom_push(key='filter_merged_df', value=merged_df)
     print("Filtering done and merged DataFrame pushed to XCom!")
     
 
-
 def drop_duplicate_motor_senses_columns(**context):
     # Retrieve merged DataFrame from XCom
-    merged_df = context['ti'].xcom_pull(key='filter_merged_df', task_ids='filter_all_motor_senses_csvs_task')
+    merged_df = context['ti'].xcom_pull(key='filter_merged_df', task_ids='merge_all_motor_senses_csvs_task')
+    if merged_df is None:
+        raise ValueError("No cleaned DataFrames retrieved from XCom for filtering.")
     
     # Drop duplicate columns
     deduped_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
-    deduped_df=deduped_df.drop(columns=['EVENT_ID','EVENT_ID_dup','NUPSOURC_dup'],inplace=True)
+    deduped_df=merged_df.drop(columns=['EVENT_ID','EVENT_ID_dup','NUPSOURC_dup'])
     
     # Save the deduplicated DataFrame
     deduped_path = os.path.join(csv_directory, 'merged_deduped_file.csv')
-    deduped_df.to_csv(deduped_path, index=False)
+    deduped_df.to_csv('/home/mrudula/MLPOPS/outputs/motor_senses_merged', index=False)
     context['ti'].xcom_push(key='deduped_df', value=deduped_df)
     
     print(f"Deduplicated merged file saved at {deduped_path}")
+    return deduped_df
 
 
 def load_and_merge_data(**context):
     participantstatus_demographics_biospecimen_merged_cleaned = context['ti'].xcom_pull(task_ids='task_clean_participantstatus_demographics_biospecimen_analysis', key='merged_data_cleaned')
     motor_senses_merged_cleaned= context['ti'].xcom_pull(task_ids='deduplication_motor_senses_task',key='deduped_df')
-
-    # # Load the merged files from both tasks
-    # df_participant = pd.read_csv(participant_path)
-    # df_motor = pd.read_csv(motor_path)
-    
-
     # Perform the merging operation
     merged_df_final = pd.merge(
         participantstatus_demographics_biospecimen_merged_cleaned,
         motor_senses_merged_cleaned,
         left_on="Participant_ID",
         right_on="PATNO",
-        how='inner'
+        how='left'
     )
+    merged_df_final.drop(columns=['PATNO'],inplace=True)
     context['ti'].xcom_push(key='merged_final', value=merged_df_final)
-    
+    #merged_df_final.to_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv', index=False)
     
     return merged_df_final
-load_and_merge_data
+
+def seperate_target_values(**context):
+    df=context['ti'].xcom_pull(task_ids='load_and_merge_data',key='merged_final')
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    
+    target_col=df['COHORT']
+    df.drop(columns=['COHORT'],inplace=True)
+    context['ti'].xcom_push(key='data', value=df)
+    context['ti'].xcom_push(key='target_col', value= target_col)
+    return target_col,df
+
 # Task 3: Data cleaning, preprocessing, and EDA
-def clean_preprocess_eda(**context):
-    data_final= context['ti'].xcom_pull(task_ids='load_and_merge_data',key='merged_final')     
-
-    # Data Cleaning
-
-    data_final = data_final.drop_duplicates()
-    data_final=data_final.drop(columns=['PATNO'],inplace=True)
-    drop_threshold = 1 * len(data_final)
-    missing_values = data_final.isnull().sum()
-    columns_to_drop = missing_values[missing_values > drop_threshold].index.tolist()
-    data_final = data_final.drop(columns=columns_to_drop)
-    for col in data_final.columns:
-        if data_final[col].dtype in ['float64', 'int64']:
-            data_final[col].fillna(int(data_final[col].mean()), inplace=True)
-        elif data_final[col].dtype == 'object':
-            data_final[col].fillna(data_final[col].mode()[0], inplace=True)
-    data_final.to_csv('/home/mrudula/MLPOPS/cleaned_data.csv', index=False)    
-
-    # Check for irregularities
-    if data_final.isnull().any().any():
-        raise ValueError("Data irregularities detected: missing values present")
-    context['ti'].xcom_push(key='cleaned_merge_final', value=data_final)
+def missing_values_drop(**context):
+    data_drop= context['ti'].xcom_pull(task_ids='seperate_target_values',key='data') 
+    if isinstance(data_drop, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        data_drop = pd.read_json(data_drop)
     
-    return data_final
+    threshold = 0.5
+    cols_to_drop = [col for col in data_drop.columns if data_drop[col].isnull().mean() > threshold]
+    data_drop.drop(columns=cols_to_drop,inplace=True)
+    print(f"Dropped columns with > 50% missing values: {cols_to_drop}")
+    context['ti'].xcom_push(key='data_drop', value= data_drop)    
+    return data_drop
 
-def feature_engineering_PCA(**context):
-    # Load your dataset
-    data = context['ti'].xcom_pull(task_ids='clean_preprocess_eda', key='cleaned_merge_final') 
-    if data.isnull().any().any():
-        raise ValueError("Data irregularities detected: missing values present")
-    # Label Encoding for `SAAMethod`
-    label_encoder = LabelEncoder()
-    data['SAAMethod'] = label_encoder.fit_transform(data['SAAMethod'])
+def seperate_categorical_columns(**context):
+    df= context['ti'].xcom_pull(task_ids='missing_values_drop',key='data_drop') 
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    
+    threshold = 9  # Define a threshold based on knowledge of the data
+    categorical_cols = [col for col in df.columns if df[col].nunique() < threshold]
+    print(categorical_cols)
+    context['ti'].xcom_push(key='categorical_cols', value= categorical_cols)    
+    return categorical_cols
 
-    # One-Hot Encoding for `SAA_Status` and `SAA_Type`
-    data_encoded = pd.get_dummies(data, columns=['SAA_Status', 'SAA_Type'])
+def seprerate_numerical_columns(**context):
+    df= context['ti'].xcom_pull(task_ids='seperate_target_values',key='data') 
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    
+    categorical_list= context['ti'].xcom_pull(task_ids='seperate_categorical_columns',key='categorical_cols') 
+    if isinstance(categorical_list, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        categorical_list = pd.read_json(categorical_list)
+    
+    numerical_cols = [col for col in df.columns if (col not in categorical_list and df[col].dtype in ['int64', 'float64'])]
+    context['ti'].xcom_push(key='numerical_cols', value= numerical_cols)  
+    return numerical_cols
 
-    # View the encoded DataFrame to confirm
-    print(data_encoded.head())
+def missing_values_impute_5percent(**context):
+    
+    df= context['ti'].xcom_pull(task_ids='seperate_target_values',key='data') 
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    
+    categorical_cols= context['ti'].xcom_pull(task_ids='seperate_categorical_columns',key='categorical_cols') 
+    if isinstance(categorical_cols, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        categorical_cols = pd.read_json(categorical_cols)
+    
+    numerical_cols=context['ti'].xcom_pull(task_ids='seperate_numerical_columns',key='numerical_cols') 
+    if isinstance(numerical_cols, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        numerical_cols = pd.read_json(numerical_cols)
+    
 
-    # Separate features and target variable
-    X = data_encoded.drop(columns=['COHORT'])  # replace 'target_column' with your target column name
+    numerical_cols_minimal_missing = [col for col in numerical_cols if df[col].isnull().mean() < 0.05]
+    categorical_cols_minimal_missing = [col for col in categorical_cols if df[col].isnull().mean() < 0.05]
 
-    # Standardize features
+    # Impute numerical columns with the median
+    for col in numerical_cols_minimal_missing:
+        median_value = df[col].median()  # Calculate median
+        df[col] = df[col].fillna(median_value)  # Impute missing values with the median
+
+    # Impute categorical columns with the mode
+    for col in categorical_cols_minimal_missing:
+        mode_value = df[col].mode()[0]  # Calculate mode (mode() returns a series, so take the first value)
+        df[col] = df[col].fillna(mode_value)  # Impute missing values with the mode
+    context['ti'].xcom_push(key='df', value= df)
+    return df
+
+def drop_correlated_unrelated_columns(**context):
+
+    df= context['ti'].xcom_pull(task_ids='missing_values_impute_5percent',key='df') 
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    df.drop(columns=['Participant_ID', 'ENROLL_DATE'],inplace=True)
+    context['ti'].xcom_push(key='drop_correlated_unrelated_columns', value= df)
+    return df
+
+def missing_values_impute_50percent_scaling(**context):
+    
+    df= context['ti'].xcom_pull(task_ids='drop_correlated_unrelated_columns',key='df') 
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    categorical_cols= context['ti'].xcom_pull(task_ids='seperate_categorical_columns',key='categorical_cols') 
+    if isinstance(categorical_cols, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        categorical_cols = pd.read_json(categorical_cols)
+    
+    numerical_cols= context['ti'].xcom_pull(task_ids='seperate_numerical_columns',key='numerical_cols')
+    if isinstance(numerical_cols, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        numerical_cols = pd.read_json(numerical_cols)
+    
+    one_hot_encoder = OneHotEncoder(handle_unknown='ignore')  # Drop first to avoid collinearity
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    numerical_pipeline = Pipeline(steps=[
+    ('scaler', scaler)
+    ])
 
-    # Initialize PCA without specifying the number of components to preserve
-    pca = PCA(n_components=None)  # Automatically retain all components
-    X_pca = pca.fit_transform(X_scaled)
+    # Categorical pipeline: Impute using KNN, then apply one-hot encoding
+    categorical_pipeline = Pipeline(steps=[
+        ('knn_impute', KNNImputer(n_neighbors=5)),  # Apply KNN imputation to categorical columns with 5-50% missing values
+        ('one_hot', one_hot_encoder)  # One-hot encode categorical columns
+    ])
 
-    # Calculate cumulative explained variance ratio
-    cumulative_explained_variance = np.cumsum(pca.explained_variance_ratio_)
-    
-    # Find the number of components that explain up to 85% variance
-    num_components = np.argmax(cumulative_explained_variance >= 0.85) + 1
-    
-    # Keep the first `num_components` components
-    X_pca_reduced = X_pca[:, :num_components]
+    # Use ColumnTransformer to apply the different pipelines to numerical and categorical columns
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numerical_pipeline, numerical_cols),  # Apply numerical pipeline to numerical columns
+            ('cat', categorical_pipeline, categorical_cols)  # Apply categorical pipeline to categorical columns
+        ],
+        remainder='passthrough'  # Keep other columns like date intact (without changes)
+    )
+    df_preprocessed = preprocessor.fit_transform(df)
+    # Retrieve column names after one-hot encoding and scaling
+    one_hot_feature_names = preprocessor.transformers_[1][1].named_steps['one_hot'].get_feature_names_out(categorical_cols)
+    # Combine column names
+    all_feature_names = numerical_cols + one_hot_feature_names.tolist() + [col for col in df.columns if col not in numerical_cols + categorical_cols]
+    # Convert the ndarray to pandas DataFrame with proper column names
+    df_preprocessed_df = pd.DataFrame(df_preprocessed.toarray(), columns=all_feature_names)
 
-    # Check the explained variance ratio for the reduced components
-    print("PCA Result (Reduced to 85% variance):\n", X_pca_reduced)
-    print("Explained Variance Ratio:", pca.explained_variance_ratio_[:num_components])
-    print("Cumulative Explained Variance:", cumulative_explained_variance[:num_components])
+    context['ti'].xcom_push(key='missing_values_impute_50percent_scaling_df', value= df_preprocessed_df)
+    return df_preprocessed_df
 
-    # Generate column names dynamically for the reduced components
-    column_names = [f'PC{i+1}' for i in range(num_components)]
+def concatenate_df_target(**context):
 
-    # Create the DataFrame with dynamically generated column names
-    pca_df = pd.DataFrame(X_pca_reduced, columns=column_names)
-
-    # View the DataFrame to confirm
-    print(pca_df.head())
-
-    # Save to CSV
-    pca_df.to_csv('/home/mrudula/MLPOPS/outputs/pca_components_reduced.csv', index=False)
-
-    print("Principal components (up to 85% variance) saved to 'pca_components_reduced.csv'")
-
-    # Convert to DataFrame with component labels
-    explained_variance_df = pd.DataFrame({
-        'Principal Component': [f'PC{i+1}' for i in range(len(pca.explained_variance_ratio_[:num_components]))],
-        'Explained Variance Ratio': pca.explained_variance_ratio_[:num_components]
-    })
-    print(explained_variance_df)
-
-
+    df_final=context['ti'].xcom_pull(key='missing_values_impute_50percent_scaling_df',task_ids='missing_values_impute_50percent_scaling')
+    if isinstance(df, str):
+        # If df is a string, it’s likely being serialized; read it as DataFrame
+        df = pd.read_json(df)
+    target_col= context['ti'].xcom_pull(key='target_col', task_ids='seperate_target_values')
+    df_final['COHORT']= target_col
+    context['ti'].xcom_push(key='df_final', value= df_final)
+    return df_final
 
 
 # Task 0: Load participant status
@@ -580,14 +682,6 @@ clean_motor_senses_5_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
-
-# Merge task
-merge_all_motor_senses_csvs_task = PythonOperator(
-    task_id='merge_all_motor_senses_csvs_task',
-    python_callable=merge_all_motor_senses_csvs,
-    provide_context=True,
-    dag=dag,
-)
 #Filter task
 filter_all_motor_senses_csvs_task = PythonOperator(
     task_id='filter_all_motor_senses_csvs_task',
@@ -595,7 +689,13 @@ filter_all_motor_senses_csvs_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
-
+# Merge task
+merge_all_motor_senses_csvs_task = PythonOperator(
+    task_id='merge_all_motor_senses_csvs_task',
+    python_callable=merge_all_motor_senses_csvs,
+    provide_context=True,
+    dag=dag,
+)
 
 # Deduplication task that pulls merged DataFrame from XCom
 deduplication_motor_senses_task = PythonOperator(
@@ -610,15 +710,55 @@ load_and_merge_task = PythonOperator(
     provide_context=True,
     dag=dag,
 )
-clean_preprocess_eda_task = PythonOperator(
-    task_id='clean_preprocess_eda',
-    python_callable=clean_preprocess_eda,
+
+seperate_target_values_task = PythonOperator(
+    task_id='seperate_target_values',
+    python_callable=seperate_target_values,
     provide_context=True,
     dag=dag,
 )
-feature_engineering_PCA_task=PythonOperator(
-    task_id='feature_engineering_PCA',
-    python_callable = feature_engineering_PCA,
+missing_values_drop_task = PythonOperator(
+    task_id='missing_values_drop',
+    python_callable=missing_values_drop,
+    provide_context=True,
+    dag=dag,
+)
+seperate_categorical_columns_task = PythonOperator(
+    task_id='seperate_categorical_columns',
+    python_callable=seperate_categorical_columns,
+    provide_context=True,
+    dag=dag,
+)
+seprerate_numerical_columns_task = PythonOperator(
+    task_id='seprerate_numerical_columns',
+    python_callable=seprerate_numerical_columns,
+    provide_context=True,
+    dag=dag,
+)
+missing_values_impute_5percent_task = PythonOperator(
+    task_id='missing_values_impute_5percent',
+    python_callable=missing_values_impute_5percent,
+    provide_context=True,
+    dag=dag,
+)
+drop_correlated_unrelated_columns_task=PythonOperator(
+    task_id='drop_correlated_unrelated_columns',
+    python_callable = drop_correlated_unrelated_columns,
+    provide_context=True,
+    dag=dag,
+
+)
+missing_values_impute_50percent_scaling_task=PythonOperator(
+    task_id='missing_values_impute_50percent_scaling',
+    python_callable = missing_values_impute_50percent_scaling,
+    provide_context=True,
+    dag=dag,
+
+)
+
+concatenate_df_target_task=PythonOperator(
+    task_id='concatenate_df_target',
+    python_callable = concatenate_df_target,
     provide_context=True,
     dag=dag,
 
@@ -637,5 +777,6 @@ load_motor_senses_2_task >> clean_motor_senses_2_task
 load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
-[clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>merge_all_motor_senses_csvs_task >> filter_all_motor_senses_csvs_task>>deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>clean_preprocess_eda_task>>feature_engineering_PCA_task >>task_send_alert_email
+[clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>filter_all_motor_senses_csvs_task>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_send_alert_email
+
