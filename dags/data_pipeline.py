@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
-from airflow.providers.airflow.operators.dagrun_operator import TriggerDagRunOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
 import pandas as pd
 import numpy as np
@@ -349,7 +349,7 @@ def load_and_merge_data(**context):
     )
     merged_df_final.drop(columns=['PATNO'],inplace=True)
     context['ti'].xcom_push(key='merged_final', value=merged_df_final)
-    
+    #merged_df_final.to_csv('/home/mrudula/MLPOPS/outputs/final_cleaned.csv', index=False)
     return merged_df_final
 
 def seperate_target_values(**context):
@@ -484,7 +484,7 @@ def missing_values_impute_50percent_scaling(**context):
     # Use ColumnTransformer to apply the different pipelines to numerical and categorical columns
     preprocessor = ColumnTransformer(
         transformers=[
-            ('num', numerical_pipeline, numerical_cols),  # Apply numerical pipeline to numerical columns
+            #('num', numerical_pipeline, numerical_cols),  # Apply numerical pipeline to numerical columns
             ('cat', categorical_pipeline, categorical_cols)  # Apply categorical pipeline to categorical columns
         ],
         remainder='passthrough'  # Keep other columns like date intact (without changes)
@@ -771,7 +771,7 @@ concatenate_df_target_task=PythonOperator(
 task_trigger_model_pipeline = TriggerDagRunOperator(
         task_id="trigger_model_pipeline",
         trigger_dag_id="model_pipeline",  # The DAG id to trigger
-        conf={"processed_data": "{{ task_instance.xcom_pull(task_ids='concatenate_df_target'', key='df_final') }}"},
+        conf={"processed_data": "{{ task_instance.xcom_pull(task_ids='concatenate_df_target', key='df_final') }}"},
         dag=dag
     )
 
@@ -789,5 +789,5 @@ load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
 [clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>filter_all_motor_senses_csvs_task>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_send_alert_email>>task_trigger_model_pipeline
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_trigger_model_pipeline>>task_send_alert_email
 
