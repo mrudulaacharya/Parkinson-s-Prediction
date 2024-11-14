@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
+from airflow.providers.airflow.operators.dagrun_operator import TriggerDagRunOperator
+from airflow.utils.dates import days_ago
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -22,7 +24,7 @@ default_args = {
 }
 
 dag = DAG(
-    'data_pipeline_with_custom_email_alert_no_fe',
+    'data_pipeline',
     default_args=default_args,
     description='Data pipeline with custom email alerts for task failures',
     schedule_interval=timedelta(days=1),
@@ -170,7 +172,7 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
     merged_data = context['ti'].xcom_pull(task_ids='task_merge_participantstatus_demographics_biospecimen_analysis', key='merged_data')
     merged_data.drop(columns=['PATNO'], inplace=True)
     context['ti'].xcom_push(key='merged_data_cleaned', value=merged_data)
-    merged_data.to_csv('/home/mrudula/MLPOPS/outputs/patient_demographics_biospecimen.csv', index=False)
+    #merged_data.to_csv('/home/mrudula/MLPOPS/outputs/patient_demographics_biospecimen.csv', index=False)
     return merged_data
 
 
@@ -327,7 +329,7 @@ def drop_duplicate_motor_senses_columns(**context):
     
     # Save the deduplicated DataFrame
     deduped_path = os.path.join(csv_directory, 'merged_deduped_file.csv')
-    deduped_df.to_csv('/home/mrudula/MLPOPS/outputs/motor_senses_merged', index=False)
+    #deduped_df.to_csv('/home/mrudula/MLPOPS/outputs/motor_senses_merged', index=False)
     context['ti'].xcom_push(key='deduped_df', value=deduped_df)
     
     print(f"Deduplicated merged file saved at {deduped_path}")
@@ -347,21 +349,18 @@ def load_and_merge_data(**context):
     )
     merged_df_final.drop(columns=['PATNO'],inplace=True)
     context['ti'].xcom_push(key='merged_final', value=merged_df_final)
-    #merged_df_final.to_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv', index=False)
     
     return merged_df_final
 
 def seperate_target_values(**context):
     df=context['ti'].xcom_pull(task_ids='load_and_merge_data',key='merged_final')
-    if isinstance(df, str):
-        # If df is a string, it’s likely being serialized; read it as DataFrame
-        df = pd.read_json(df)
+    
     
     target_col=df['COHORT']
     df.drop(columns=['COHORT'],inplace=True)
     context['ti'].xcom_push(key='data', value=df)
-    context['ti'].xcom_push(key='target_col', value= target_col)
-    return target_col,df
+    context['ti'].xcom_push(key='target_col', value= target_col.tolist())
+    return target_col.tolist(),df
 
 # Task 3: Data cleaning, preprocessing, and EDA
 def missing_values_drop(**context):
@@ -390,7 +389,7 @@ def seperate_categorical_columns(**context):
     return categorical_cols
 
 def seprerate_numerical_columns(**context):
-    df= context['ti'].xcom_pull(task_ids='seperate_target_values',key='data') 
+    df= context['ti'].xcom_pull(task_ids='missing_values_drop',key='data_drop') 
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
@@ -402,11 +401,12 @@ def seprerate_numerical_columns(**context):
     
     numerical_cols = [col for col in df.columns if (col not in categorical_list and df[col].dtype in ['int64', 'float64'])]
     context['ti'].xcom_push(key='numerical_cols', value= numerical_cols)  
+    
     return numerical_cols
 
 def missing_values_impute_5percent(**context):
     
-    df= context['ti'].xcom_pull(task_ids='seperate_target_values',key='data') 
+    df= context['ti'].xcom_pull(task_ids='missing_values_drop',key='data_drop') 
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
@@ -416,13 +416,13 @@ def missing_values_impute_5percent(**context):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         categorical_cols = pd.read_json(categorical_cols)
     
-    numerical_cols=context['ti'].xcom_pull(task_ids='seperate_numerical_columns',key='numerical_cols') 
-    if isinstance(numerical_cols, str):
-        # If df is a string, it’s likely being serialized; read it as DataFrame
-        numerical_cols = pd.read_json(numerical_cols)
+    numerical_cols=context['ti'].xcom_pull(task_ids='seprerate_numerical_columns',key='numerical_cols') 
+    if numerical_cols is None:
+        raise ValueError("numerical_cols is None, make sure 'seperate_numerical_columns' task pushed a valid list.")
     
-
-    numerical_cols_minimal_missing = [col for col in numerical_cols if df[col].isnull().mean() < 0.05]
+    numerical_cols_minimal_missing=[]
+    if numerical_cols:
+        numerical_cols_minimal_missing = [col for col in numerical_cols if df[col].isnull().mean() < 0.05]
     categorical_cols_minimal_missing = [col for col in categorical_cols if df[col].isnull().mean() < 0.05]
 
     # Impute numerical columns with the median
@@ -440,16 +440,22 @@ def missing_values_impute_5percent(**context):
 def drop_correlated_unrelated_columns(**context):
 
     df= context['ti'].xcom_pull(task_ids='missing_values_impute_5percent',key='df') 
+    numerical_cols=context['ti'].xcom_pull(task_ids='seprerate_numerical_columns',key='numerical_cols') 
+    if numerical_cols is None:
+        raise ValueError("numerical_cols is None, make sure 'seperate_numerical_columns' task pushed a valid list.")
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
     df.drop(columns=['Participant_ID', 'ENROLL_DATE'],inplace=True)
+    numerical_cols.remove('Participant_ID')
+    
+    context['ti'].xcom_push(key='numerical_cols', value= numerical_cols) 
     context['ti'].xcom_push(key='drop_correlated_unrelated_columns', value= df)
-    return df
+    return df,numerical_cols
 
 def missing_values_impute_50percent_scaling(**context):
     
-    df= context['ti'].xcom_pull(task_ids='drop_correlated_unrelated_columns',key='df') 
+    df= context['ti'].xcom_pull(task_ids='drop_correlated_unrelated_columns',key='drop_correlated_unrelated_columns') 
     if isinstance(df, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         df = pd.read_json(df)
@@ -458,7 +464,7 @@ def missing_values_impute_50percent_scaling(**context):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         categorical_cols = pd.read_json(categorical_cols)
     
-    numerical_cols= context['ti'].xcom_pull(task_ids='seperate_numerical_columns',key='numerical_cols')
+    numerical_cols= context['ti'].xcom_pull(task_ids='drop_correlated_unrelated_columns',key='numerical_cols')
     if isinstance(numerical_cols, str):
         # If df is a string, it’s likely being serialized; read it as DataFrame
         numerical_cols = pd.read_json(numerical_cols)
@@ -497,11 +503,10 @@ def missing_values_impute_50percent_scaling(**context):
 def concatenate_df_target(**context):
 
     df_final=context['ti'].xcom_pull(key='missing_values_impute_50percent_scaling_df',task_ids='missing_values_impute_50percent_scaling')
-    if isinstance(df, str):
-        # If df is a string, it’s likely being serialized; read it as DataFrame
-        df = pd.read_json(df)
+    
     target_col= context['ti'].xcom_pull(key='target_col', task_ids='seperate_target_values')
     df_final['COHORT']= target_col
+    df_final.to_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv', index=False)
     context['ti'].xcom_push(key='df_final', value= df_final)
     return df_final
 
@@ -603,7 +608,7 @@ task_clean_participantstatus_demographics_biospecimen_analysis = PythonOperator(
     dag=dag,
 )
 
-# Task 12: Send alert email in case of failure
+# Send alert email in case of failure
 task_send_alert_email = PythonOperator(
     task_id='task_send_alert_email',
     python_callable=send_custom_alert_email,
@@ -763,6 +768,12 @@ concatenate_df_target_task=PythonOperator(
     dag=dag,
 
 )
+task_trigger_model_pipeline = TriggerDagRunOperator(
+        task_id="trigger_model_pipeline",
+        trigger_dag_id="model_pipeline",  # The DAG id to trigger
+        conf={"processed_data": "{{ task_instance.xcom_pull(task_ids='concatenate_df_target'', key='df_final') }}"},
+        dag=dag
+    )
 
 # Setting the task dependencies
 task_participant_status_load >> task_clean_participant_status
@@ -778,5 +789,5 @@ load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
 [clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>filter_all_motor_senses_csvs_task>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_send_alert_email
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_send_alert_email>>task_trigger_model_pipeline
 
