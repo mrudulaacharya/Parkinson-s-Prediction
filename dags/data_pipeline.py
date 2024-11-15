@@ -484,7 +484,7 @@ def missing_values_impute_50percent_scaling(**context):
     # Use ColumnTransformer to apply the different pipelines to numerical and categorical columns
     preprocessor = ColumnTransformer(
         transformers=[
-            #('num', numerical_pipeline, numerical_cols),  # Apply numerical pipeline to numerical columns
+            ('num', numerical_pipeline, numerical_cols),  # Apply numerical pipeline to numerical columns
             ('cat', categorical_pipeline, categorical_cols)  # Apply categorical pipeline to categorical columns
         ],
         remainder='passthrough'  # Keep other columns like date intact (without changes)
@@ -507,6 +507,7 @@ def concatenate_df_target(**context):
     target_col= context['ti'].xcom_pull(key='target_col', task_ids='seperate_target_values')
     df_final['COHORT']= target_col
     df_final.to_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv', index=False)
+    df_final=df_final.to_json(orient='split')
     context['ti'].xcom_push(key='df_final', value= df_final)
     return df_final
 
