@@ -18,7 +18,18 @@ To run this project, you need:
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/mrudulaacharya/Parkinson-s-Prediction.git
-   cd Parkinson-s-Prediction
+   cd Parkinson-s-Prediction ```
+2.	Download and install docker from official website
+3.	Update the docker-compose file:
+4.	Paths to the folders where csv files are mountedb.	Email for alert notifications
+5.	To build the docker services: `docker-compose build`
+6.	To run the services: `docker-compose up`
+7.	To stop the services: `docker-compose down`
+8.	To clean up all stopped containers, networks, and volumes created by Docker Compose: `docker-compose down –volumes`
+9.	To access the airflow web UI: open http://localhost:8080 in your browser.
+10.	Trigger both DAGs: data_pipeline and model_pipeline
+11.	To view the model parameters, accuracy metrics, model metadata: paste 127.0.0.1:5000 in the browser
+
 
 ## Dataset
 The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI) and comprises comprehensive biomedical data, including demographic details, motor assessments, and various biomarkers pertinent to Parkinson's disease.
