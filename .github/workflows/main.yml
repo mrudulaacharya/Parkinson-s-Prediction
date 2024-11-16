@@ -1,0 +1,69 @@
+name: Trigger Airflow DAG in Docker
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dag_id:
+        description: 'Airflow DAG ID to trigger'
+        required: true
+        default: 'example_dag'
+
+jobs:
+  airflow_dag_trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Docker Compose
+      - name: Set up Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
+
+      # Step 3: Install Dependencies (Optional for Host System)
+      - name: Install Python Dependencies
+        run: |
+          pip install apache-airflow
+          pip install -r requirements.txt
+
+      # Step 4: Build and Start Airflow Docker Containers
+      - name: Build and Start Airflow
+        run: |
+          docker-compose -f docker-compose.yml up -d
+
+      # Step 5: Wait for Airflow Webserver to Be Ready
+      - name: Wait for Airflow to Start
+        run: |
+          echo "Waiting for Airflow Webserver to be ready..."
+          until curl -s http://localhost:8080/health | grep '"healthy": true'; do
+            echo "Waiting for Airflow..."
+            sleep 5
+          done
+          echo "Airflow is ready!"
+
+      # Step 6: Trigger the Airflow DAG
+      - name: Trigger Airflow DAG
+        run: |
+          docker exec -it $(docker ps -q -f "name=airflow_webserver") \
+          airflow dags trigger --conf '{}' ${{ github.event.inputs.dag_id }}
+
+      # Step 7: Check the Status of the DAG Run
+      - name: Check DAG Run Status
+        run: |
+          docker exec -it $(docker ps -q -f "name=airflow_webserver") \
+          airflow dags list-runs --dag-id ${{ github.event.inputs.dag_id }} --no-color --output table
+
+      # Step 8: Shut Down Airflow Docker Containers
+      - name: Shut Down Airflow
+        if: always()
+        run: |
+          docker-compose -f docker-compose.yml down
