@@ -1,1 +1,6 @@
 data_profiling_report.html
+raw_data/
+motor_assessments/
+outputs/
+models/
+logs/

@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  airflow:
+    build: .
+    image: parkinson_prediction_airflow
+    ports:
+      - "8080:8080"   # Expose the Airflow webserver on localhost:8080
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+    volumes:
+      - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
+      - ./logs:/opt/airflow/logs   # Optional: log persistence
+      - ./raw_data:/opt/airflow/raw_data       # Mount 'raw_data' folder
+      - ./motor_assessments:/opt/airflow/motor_assessments  # Mount 'motor_assessments' folder
+      - ./outputs:/opt/airflow/outputs # Mount 'output' folder
+      - ./models:/opt/airflow/models
+    entrypoint: ["/bin/bash", "/opt/airflow/entrypoint.sh"]

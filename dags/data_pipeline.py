@@ -33,11 +33,11 @@ dag = DAG(
 )
 
 # Define file paths
-participant_status_path = '/home/mrudula/MLPOPS/data_raw/Participant_Status_27Oct2024.csv'
-demographics_path = '/home/mrudula/MLPOPS/data_raw/Demographics_27Oct2024.csv'
-biospecimen_analysis_path = '/home/mrudula/MLPOPS/data_raw/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
+participant_status_path = '/opt/airflow/raw_data/Participant_Status_10Nov2024.csv'
+demographics_path = '/opt/airflow/raw_data/Demographics_10Nov2024.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_10Nov2024.csv'
 # Directory where CSV files are stored
-csv_directory = '/home/mrudula/MLPOPS/motor_senses/'
+csv_directory = '/opt/airflow/motor_assessments/'
 
 # Custom email alert function
 def send_custom_alert_email(**context):
@@ -178,19 +178,19 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
 
 # Load functions for each CSV file
 def load_motor_senses_1(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_26Oct2024.csv'))
 
 def load_motor_senses_2(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_26Oct2024.csv'))
 
 def load_motor_senses_3(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_26Oct2024.csv'))
 
 def load_motor_senses_4(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_26Oct2024.csv'))
 
 def load_motor_senses_5(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_05Nov2024.csv'))
 # Clean functions for each loaded CSV
 def clean_motor_senses_1(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
@@ -506,7 +506,7 @@ def concatenate_df_target(**context):
     
     target_col= context['ti'].xcom_pull(key='target_col', task_ids='seperate_target_values')
     df_final['COHORT']= target_col
-    df_final.to_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv', index=False)
+    df_final.to_csv('/opt/airflow/outputs/airflow_cleaned_data.csv', index=False)
     df_final=df_final.to_json(orient='split')
     context['ti'].xcom_push(key='df_final', value= df_final)
     return df_final

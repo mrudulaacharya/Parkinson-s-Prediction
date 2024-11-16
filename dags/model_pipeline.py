@@ -23,6 +23,7 @@ import joblib
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 import pickle
 
+folder_path = '/opt/airflow/models'
 
 default_args = {
     'owner': 'airflow',
@@ -62,7 +63,6 @@ def send_custom_alert_email(**context):
 
 def get_data_from_data_pipeline(**context):
     df = context['dag_run'].conf['processed_data']
-    #df=pd.read_csv('/home/mrudula/MLPOPS/outputs/airflow_cleaned_data.csv')
     context['ti'].xcom_push(key='df', value=df)
     return df
     
@@ -155,7 +155,13 @@ def tune_SVM(**context):
                                 context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'), 
                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'), 
                                 **context)
-    svm_model_filename = f"/home/mrudula/MLPOPS/models/best_svm_model.pkl"
+    
+    # Check if the folder exists
+    if not os.path.exists(folder_path):
+        # Create the folder if it doesn't exist
+        os.makedirs(folder_path)
+
+    svm_model_filename = f"/opt/airflow/models/best_svm_model.pkl"
     joblib.dump(best_model_SVM, svm_model_filename)
     context['ti'].xcom_push(key=f"best_svm_model", value=svm_model_filename)
 
@@ -174,7 +180,7 @@ def tune_RF(**context):
                                 context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'), 
                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'), 
                                 **context)
-    rf_model_filename = f"/home/mrudula/MLPOPS/models/best_rf_model.pkl"
+    rf_model_filename = f"/opt/airflow/models/best_rf_model.pkl"
     joblib.dump(best_model_rf, rf_model_filename)
     context['ti'].xcom_push(key=f"best_rf_model", value=rf_model_filename)
     
@@ -193,7 +199,7 @@ def tune_XGB(**context):
                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'), 
                                 **context)
     
-    xgb_model_filename = f"/home/mrudula/MLPOPS/models/best_xgb_model.pkl"
+    xgb_model_filename = f"/opt/airflow/models/best_xgb_model.pkl"
     joblib.dump(best_model_xgb, xgb_model_filename)
     context['ti'].xcom_push(key=f"best_xgb_model", value=xgb_model_filename)
     
@@ -210,7 +216,7 @@ def tune_LR(**context):
                                 context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'), 
                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'), 
                                 **context)
-    lr_model_filename = f"/home/mrudula/MLPOPS/models/best_lr_model.pkl"
+    lr_model_filename = f"/opt/airflow/models/best_lr_model.pkl"
     joblib.dump(best_model_lr, lr_model_filename)
     context['ti'].xcom_push(key=f"best_lr_model", value=lr_model_filename)
    
