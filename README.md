@@ -23,37 +23,6 @@ To run this project, you need:
 ## Dataset
 The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI) and comprises comprehensive biomedical data, including demographic details, motor assessments, and various biomarkers pertinent to Parkinson's disease.
 
-## Project Folder Structure
-
-```plaintext
-Parkinsons-Prediction/
-├── README.md                     # Project documentation
-├── data/                         # Folder for datasets 
-├── scripts/                      # Scripts for data handling and preprocessing
-│   ├── Correlation.ipynb         # Notebook for correlation analysis
-│   ├── DataProfiling.ipynb       # Data profiling notebook
-│   ├── bias_analysis.ipynb       # Notebook for bias analysis
-│   ├── data_merging.ipynb        # Notebook for data merging
-│   ├── data_schema.ipynb         # Notebook for defining data schema
-│   ├── merge_data.py             # Script to merge datasets
-│   ├── motor_dag.py              # DAG script for motor skills data processing
-│   ├── motorsenses.ipynb         # Notebook for motor senses analysis
-│   ├── participantstatus_demographics_biospecimen_dag.py # DAG script for participant status, demographics, and biospecimen
-│   ├── pca.py                    # Script for principal component analysis
-│   ├── preprocessing.py          # General preprocessing script
-│   └── resampling.py             # Script for data resampling
-├── dags/                         # DAGs for scheduling and automation
-│   └── data_pipeline_new.py      # New data pipeline DAG script
-├── logs/                         # Folder for logs
-├── requirements.txt              # Dependencies and libraries
-└── tests/                        # Test scripts
-    ├── __init__.py               # Init file for test package
-    ├── test_duplicate.py         # Unit test for handling duplicates
-    ├── test_missing_value.py     # Unit test for handling missing values
-    ├── test_outlier.py           # Unit test for outlier cleaning
-    └── test_resampling.py        # Unit test for data resampling
-
-```
 
 ## Description of the Data Pipeline Components:
 • send_custom_alert_email: Sends a custom alert email if a task fails or is retried, with details about the task and DAG.  
