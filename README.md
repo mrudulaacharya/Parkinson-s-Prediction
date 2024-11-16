@@ -15,10 +15,10 @@ To run this project, you need:
 - `pip` for package management
 
 ### Installation
-1. **Clone the repository**:
+1. Clone the repository:
    ```bash
    git clone https://github.com/mrudulaacharya/Parkinson-s-Prediction.git
-   cd Parkinson-s-Prediction ```
+   cd Parkinson-s-Prediction
 2.	Download and install docker from official website
 3.	Update the docker-compose file:
 4.	Paths to the folders where csv files are mountedb.	Email for alert notifications
