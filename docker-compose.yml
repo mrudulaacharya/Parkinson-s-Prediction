@@ -10,6 +10,9 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - MLFLOW_TRACKING_URI=file:/opt/airflow/mlruns  # Set tracking URI to a local directory
+      - EMAIL=mrudulaacharya18@gmail.com
+      - EMAIL_PASSWORD=lhwnkkhmvptmjghx
     volumes:
       - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       - ./logs:/opt/airflow/logs   # Optional: log persistence
@@ -17,4 +20,5 @@ services:
       - ./motor_assessments:/opt/airflow/motor_assessments  # Mount 'motor_assessments' folder
       - ./outputs:/opt/airflow/outputs # Mount 'output' folder
       - ./models:/opt/airflow/models
+      - ./mlruns:/opt/airflow/mlruns  # Mount mlruns folder for MLflow tracking
     entrypoint: ["/bin/bash", "/opt/airflow/entrypoint.sh"]
