@@ -20,7 +20,12 @@ from sklearn.pipeline import Pipeline
 default_args = {
     'owner': 'airflow',
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=1),
+    'on_failure_callback': lambda context: send_custom_alert_email(
+        "failed",
+        task_id=context['task_instance'].task_id,
+        dag_id=context['task_instance'].dag_id,
+        **context)
 }
 
 dag = DAG(
@@ -33,20 +38,18 @@ dag = DAG(
 )
 
 # Define file paths
-participant_status_path = '/opt/airflow/raw_data/Participant_Status_10Nov2024.csv'
-demographics_path = '/opt/airflow/raw_data/Demographics_10Nov2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_10Nov2024.csv'
+participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
+demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
 # Directory where CSV files are stored
 csv_directory = '/opt/airflow/motor_assessments/'
 
-# Custom email alert function
-def send_custom_alert_email(**context):
-    task_id = context['task_instance'].task_id
-    dag_id = context['task_instance'].dag_id
-    try_number = context['task_instance'].try_number
-    subject = "Airflow Task Alert - Failure or Retry"
-    body = f"Task {task_id} in DAG {dag_id} has failed or retried (Attempt: {try_number})."
 
+
+def send_custom_alert_email(status, task_id, dag_id, **context):
+    subject = f"Airflow Task Alert - {status.capitalize()}"
+    body = f"Task {task_id} in DAG {dag_id} has {status}."
+    
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = "mrudulaacharya18@gmail.com"
@@ -55,11 +58,13 @@ def send_custom_alert_email(**context):
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
-            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")  # Use an app-specific password
+            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")  # Use app-specific password
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-            print("Alert email sent successfully.")
+            print(f"{status.capitalize()} email sent successfully.")
     except Exception as e:
-        print(f"Error sending alert email: {e}")
+        print(f"Error sending {status} email: {e}")
+
+
 
 # Define functions for each data processing task
 def participant_status_load(**context):
@@ -178,19 +183,19 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
 
 # Load functions for each CSV file
 def load_motor_senses_1(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_26Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
 
 def load_motor_senses_2(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_26Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
 
 def load_motor_senses_3(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_26Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
 
 def load_motor_senses_4(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_26Oct2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
 
 def load_motor_senses_5(**context):
-    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_05Nov2024.csv'))
+    return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
 # Clean functions for each loaded CSV
 def clean_motor_senses_1(**context):
     # Pull the DataFrame from XCom, making sure it's a DataFrame
@@ -558,6 +563,7 @@ task_clean_participantstatus_demographic = PythonOperator(
     python_callable=clean_participantstatus_demographic,
     provide_context=True,
     dag=dag,
+    
 )
 
 # Task 6: Load Biospecimen Analysis Data
