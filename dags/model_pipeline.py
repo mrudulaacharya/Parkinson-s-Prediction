@@ -32,7 +32,13 @@ mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
 default_args = {
     'owner': 'airflow',
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=1),
+    'on_failure_callback': lambda context: send_custom_alert_email(
+        "failed",
+        task_id=context['task_instance'].task_id,
+        dag_id=context['task_instance'].dag_id,
+        **context)
+
 }
 
 dag = DAG(
@@ -45,24 +51,24 @@ dag = DAG(
 )
 
 # Custom email alert function
-def send_custom_alert_email(**context):
-    task_id = context['task_instance'].task_id
-    dag_id = context['task_instance'].dag_id
-    try_number = context['task_instance'].try_number
-    subject = "Airflow Task Alert - Failure or Retry"
-    body = f"Task {task_id} in DAG {dag_id} has failed or retried (Attempt: {try_number})."
+def send_custom_alert_email(status, task_id, dag_id, **context):
+    subject = f"Airflow Task Alert - {status.capitalize()}"
+    body = f"Task {task_id} in DAG {dag_id} has {status}."
+    
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = "mrudulaacharya18@gmail.com"
     msg['To'] = "mrudulaacharya18@gmail.com"
+
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
-            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")  # Use an app-specific password
+            server.login("mrudulaacharya18@gmail.com", "lhwnkkhmvptmjghx")  # Use app-specific password
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-            print("Alert email sent successfully.")
+            print(f"{status.capitalize()} email sent successfully.")
     except Exception as e:
-        print(f"Error sending alert email: {e}")
+        print(f"Error sending {status} email: {e}")
+
 
 
 def get_data_from_data_pipeline(**context):
@@ -277,15 +283,6 @@ def model_accuracies(**context):
         'Logistic Regression': (lr_model, lr_accuracy)
     }
 
-    # Find the model with the highest accuracy
-    #best_model_name, (best_model, best_accuracy) = max(model_accuracies.items(), key=lambda item: item[1][1])
-
-    # # Log and push the best model and accuracy
-    # context['ti'].xcom_push(key='best_model', value=best_model)
-    # context['ti'].xcom_push(key='best_model_name', value=best_model_name)
-    # context['ti'].xcom_push(key='best_accuracy', value=best_accuracy)
-    
-    #print(f"Best Model: {best_model_name}, Validation Accuracy: {best_accuracy}")
     context['ti'].xcom_push(key='model_accuracies', value=model_accuracies)
     return model_accuracies
 
@@ -531,6 +528,12 @@ train_test_split_task = PythonOperator(
     python_callable=train_test_split,
     provide_context=True,
     dag=dag,
+    on_success_callback=lambda context: send_custom_alert_email(
+            "succeeded", 
+            task_id=context['task_instance'].task_id, 
+            dag_id=context['task_instance'].dag_id, 
+            **context
+        )
 )
 
 tune_SVM_task = PythonOperator(
@@ -571,6 +574,12 @@ bias_report_task = PythonOperator(
     python_callable=bias_report,
     provide_context=True,
     dag=dag,
+    on_success_callback=lambda context: send_custom_alert_email(
+            "succeeded", 
+            task_id=context['task_instance'].task_id, 
+            dag_id=context['task_instance'].dag_id, 
+            **context
+        )
 )
 
 model_ranking_task = PythonOperator(
@@ -598,6 +607,12 @@ register_best_model_task=PythonOperator(
     python_callable=register_best_model,
     provide_context=True,
     dag=dag,
+    on_success_callback=lambda context: send_custom_alert_email(
+            "succeeded", 
+            task_id=context['task_instance'].task_id, 
+            dag_id=context['task_instance'].dag_id, 
+            **context
+        )
 )
 
 # Send alert email in case of failure
