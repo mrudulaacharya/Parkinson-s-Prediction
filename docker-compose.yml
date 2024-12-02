@@ -24,4 +24,10 @@ services:
       - ./mlruns:/opt/airflow/mlruns # Mount mlruns folder for MLflow tracking
       - ./.dvc:/opt/airflow/.dvc          # Mount DVC metadata folder
       - ./.git:/opt/airflow/.git 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      retries: 5
+      start_period: 10s
+      timeout: 5s
     entrypoint: ["/bin/bash", "/opt/airflow/entrypoint.sh"]

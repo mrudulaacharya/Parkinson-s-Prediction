@@ -41,5 +41,6 @@ airflow users create --username smp1699 --firstname Mrudula --lastname Acharya -
 # Start the scheduler in the background
 airflow scheduler &
 
+sleep 60
 # Start the webserver in the foreground (so Docker keeps the container running)
 exec airflow webserver
