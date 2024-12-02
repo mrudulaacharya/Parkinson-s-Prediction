@@ -90,12 +90,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y docker-compose
-          
+
       - name: Start Airflow
         run: |
           docker-compose down || true  # Stop any existing Airflow containers
           docker-compose up -d --build
 
+      - name: List Running Containers
+        run: docker ps -a 
+        
       - name: Wait for Airflow to Start
         run: sleep 30  # Allow time for Airflow to initialize (adjust if needed)
 
