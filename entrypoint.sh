@@ -39,6 +39,8 @@ airflow users create --username smp1699 --firstname Mrudula --lastname Acharya -
 #   git commit -m "Initial commit for Airflow and DVC setup"
 # fi
 # Start the scheduler in the background
+chmod -R 777 /opt/airflow/logs
+
 airflow scheduler &
 
 sleep 60
