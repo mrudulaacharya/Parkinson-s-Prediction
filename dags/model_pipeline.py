@@ -148,8 +148,7 @@ def train_and_tune_model(model, param_grid, model_name, X_train, y_train, X_val,
         
         print(f"{model_name} Best Params: {best_params}, Validation Accuracy: {val_accuracy}")
         
-        # Push best model to XCom
-        #context['ti'].xcom_push(key=f"best_{model_name.lower()}_model", value=best_model)
+    
         
         return best_model
     
@@ -462,6 +461,7 @@ def model_ranking(**context):
         model_fairness_penalties[model_name] = average_penalty
     
     # Step 3: Rank models based on both accuracy and fairness
+
     model_scores = []
     
     for model_name, (model, accuracy) in model_accuracies.items():
