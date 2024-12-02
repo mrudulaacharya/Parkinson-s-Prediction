@@ -23,7 +23,8 @@ import joblib
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 import pickle
 from fairlearn.metrics import MetricFrame, demographic_parity_difference, equalized_odds_difference
-
+from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 folder_path = '/opt/airflow/models'
 
 # Set tracking server URI to a local directory
@@ -165,8 +166,27 @@ def evaluate_on_test_set(model, X_test, y_test):
         
         # Print and log classification report
         report = classification_report(y_test, y_pred, output_dict=True)
-        mlflow.log_metrics({"accuracy": report["accuracy"]}, step=1)
+       
+        mlflow.log_metrics({"accuracy": report["accuracy"],
+                            "precision": report["weighted avg"]["precision"],
+                            "recall": report["weighted avg"]["recall"],
+                            "f1_score": report["weighted avg"]["f1-score"]})
+        
 
+        fpr, tpr, _ = roc_curve(y_test, model.predict_proba(X_test)[:, 1])
+        roc_auc = auc(fpr, tpr)
+        plt.figure()
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+        plt.legend(loc="lower right")
+        plt.title("ROC Curve")
+        plt.savefig("/opt/airflow/outputs/roc_curve.png")
+        mlflow.log_artifact("/opt/airflow/outputs/roc_curve.png")
+
+        # Confusion Matrix
+        cm = confusion_matrix(y_test, y_pred)
+        ConfusionMatrixDisplay(cm).plot()
+        plt.savefig("/opt/airflow/outputs/confusion_matrix.png")
+        mlflow.log_artifact("/opt/airflow/outputs/confusion_matrix.png")
         
         # Log classification report as text for easy access
         report_text = classification_report(y_test, y_pred)
@@ -282,6 +302,12 @@ def model_accuracies(**context):
         'XGBoost': (xgb_model, xgb_accuracy),
         'Logistic Regression': (lr_model, lr_accuracy)
     }
+    with mlflow.start_run(run_name="Model_Validation_Accuracies"):
+        for model_name, (model_path, accuracy) in model_accuracies.items():
+            # Log the accuracy metric
+            mlflow.log_metric(f"{model_name}_accuracy", accuracy)
+            # Log the model as an artifact
+            mlflow.log_artifact(model_path, artifact_path=f"models/{model_name}")
 
     context['ti'].xcom_push(key='model_accuracies', value=model_accuracies)
     return model_accuracies
@@ -399,6 +425,8 @@ def bias_report(**context):
                         'dp_diff': dp_diff,
                         'eo_diff': eo_diff
                     })
+        mlflow.log_dict(model_results, "fairness_metrics.json")
+
 
         mlflow.end_run()
 

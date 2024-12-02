@@ -3,5 +3,18 @@ raw_data/
 motor_assessments/
 outputs/
 models/
+airflow.db
 logs/
 mlruns/
+cleaned_to_merge
+# Ignore DVC cache (can be very large)
+.dvc/cache/
+.dvc/tmp/
+*.pyc
+__pycache__/
+venv/
+.env
+
+# Ignore Docker-related artifacts
+*.tar
+*.log
