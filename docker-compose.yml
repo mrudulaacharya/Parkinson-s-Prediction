@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   airflow:
+    container_name: airflow
     build: .
     image: parkinson_prediction_airflow
     ports:
