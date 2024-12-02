@@ -1,0 +1,14 @@
+stages:
+  preprocess:
+    cmd: echo "Data dependencies and outputs tracked by DVC."
+    deps:
+      - raw_data/Demographics_27Oct2024.csv
+      - raw_data/Participant_Status_27Oct2024.csv
+      - raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv
+      - motor_assessments/MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv
+      - motor_assessments/MDS-UPDRS_Part_I_27Oct2024.csv
+      - motor_assessments/MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv
+      - motor_assessments/MDS-UPDRS_Part_III_27Oct2024.csv
+      - motor_assessments/MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv
+    outs:
+      - outputs/airflow_cleaned_data.csv

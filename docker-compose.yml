@@ -20,5 +20,7 @@ services:
       - ./motor_assessments:/opt/airflow/motor_assessments  # Mount 'motor_assessments' folder
       - ./outputs:/opt/airflow/outputs # Mount 'output' folder
       - ./models:/opt/airflow/models
-      - ./mlruns:/opt/airflow/mlruns  # Mount mlruns folder for MLflow tracking
+      - ./mlruns:/opt/airflow/mlruns # Mount mlruns folder for MLflow tracking
+      - ./.dvc:/opt/airflow/.dvc          # Mount DVC metadata folder
+      - ./.git:/opt/airflow/.git 
     entrypoint: ["/bin/bash", "/opt/airflow/entrypoint.sh"]
