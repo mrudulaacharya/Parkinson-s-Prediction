@@ -163,7 +163,7 @@ def evaluate_on_test_set(model, X_test, y_test):
         test_accuracy = accuracy_score(y_test, y_pred)
         mlflow.log_metric("test_accuracy", test_accuracy)
         
-        # Print and log classification report
+        # Print and log classification reports
         report = classification_report(y_test, y_pred, output_dict=True)
        
         mlflow.log_metrics({"accuracy": report["accuracy"],
