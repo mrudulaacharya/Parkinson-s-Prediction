@@ -98,13 +98,16 @@ jobs:
 
       - name: List Running Containers
         run: docker ps -a 
-        
+
       - name: Wait for Airflow to Start
         run: sleep 30  # Allow time for Airflow to initialize (adjust if needed)
 
       - name: Trigger data_pipeline DAG
         run: |
           docker exec airflow airflow dags trigger data_pipeline
+      
+      - name: Check Airflow Logs
+        run: docker logs airflow
 
       - name: Show DAG Status
         run: docker exec airflow airflow dags list-runs -d data_pipeline
