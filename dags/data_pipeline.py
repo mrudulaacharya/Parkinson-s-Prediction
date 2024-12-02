@@ -38,7 +38,7 @@ dag = DAG(
     catchup=False,
 )
 
-# Define file paths
+# Define file path
 participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
 demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
 biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
