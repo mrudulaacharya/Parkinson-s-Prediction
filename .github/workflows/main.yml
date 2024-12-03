@@ -67,88 +67,160 @@
 #         if: always()
 #         run: |
 #           docker-compose -f docker-compose.yml down
-name: Trigger Airflow DAG on Push
+# name: Trigger Airflow DAG on Push
+
+# on:
+#   push:
+#     paths:
+#       - "dags/**"  # Trigger only when changes are made to the `dags` folder
+#     branches:
+#       - main
+
+# jobs:
+#   trigger-dag:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v2
+
+#       - name: Set up Docker
+#         uses: docker/setup-buildx-action@v2
+
+#       - name: Install Docker Compose
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y docker-compose
+
+#       - name: Create Logs Directory
+#         run: mkdir -p ./logs
+
+#       - name: Set Permissions for Logs Directory
+#         run: chmod -R 777 ./logs
+
+#       - name: Start Airflow
+#         run: |
+#           docker-compose down || true  # Stop any existing Airflow containers
+#           docker-compose up -d --build
+
+#       - name: List Running Containers
+#         run: docker ps -a 
+
+#       - name: Wait for Airflow to Start
+#         run: sleep 60  # Allow time for Airflow to initialize (adjust if needed)
+#       - name: Initialize Airflow Database
+#         run: docker exec airflow airflow db init
+
+#       - name: Wait for Airflow to Start and Become Healthy
+#         run: |
+#           MAX_RETRIES=10
+#           RETRY_COUNT=0
+#           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+#             STATUS=$(docker inspect --format='{{.State.Health.Status}}' airflow)
+#             if [ "$STATUS" = "healthy" ]; then
+#               echo "Airflow is healthy!"
+#               break
+#             else
+#               echo "Waiting for Airflow to become healthy... (Status: $STATUS)"
+#               RETRY_COUNT=$((RETRY_COUNT + 1))
+#               sleep 10
+#             fi
+#           done
+
+#           if [ "$STATUS" != "healthy" ]; then
+#             echo "Airflow did not become healthy. Exiting."
+#             docker logs airflow
+#             exit 1
+#           fi
+
+      
+#       - name: Fix Permissions for Logs Directory
+#         run: docker exec airflow chmod -R 777 /opt/airflow/logs
+
+#       - name: Check Airflow Logs Directory Ownership
+#         run: docker exec airflow ls -ld /opt/airflow/logs
+
+
+#       - name: Check if container is running
+#         run: |
+#           docker ps -a
+#           docker exec airflow airflow version
+      
+#       - name: Trigger data_pipeline DAG
+#         run: |
+#           docker exec airflow airflow dags trigger data_pipeline
+      
+#       - name: Check Airflow Logs
+#         run: docker logs airflow
+
+#       - name: Debug Airflow Container
+#         run: |
+#           docker exec airflow ls -ld /opt/airflow/logs
+#           docker exec airflow airflow db check
+#           docker exec airflow airflow dags list
+
+#       - name: Show DAG Status
+#         run: docker exec airflow airflow dags list-runs -d data_pipeline
+name: Deploy and Trigger Airflow DAG
 
 on:
   push:
     paths:
-      - "dags/**"  # Trigger only when changes are made to the `dags` folder
-    branches:
-      - main
+      - dags/**
+      - docker-compose.yml
+      - Dockerfile
+      - entrypoint.sh
+      - requirements.txt
 
 jobs:
-  trigger-dag:
+  deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v2
 
-      - name: Set up Docker
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Docker Buildx (for building multi-stage Docker images)
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Install Docker Compose
+      # Step 3: Build and run Docker Compose
+      - name: Build and Start Airflow
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
-
-      - name: Create Logs Directory
-        run: mkdir -p ./logs
-
-      - name: Set Permissions for Logs Directory
-        run: chmod -R 777 ./logs
-
-      - name: Start Airflow
-        run: |
-          docker-compose down || true  # Stop any existing Airflow containers
+          docker-compose down || true
           docker-compose up -d --build
 
-      - name: List Running Containers
-        run: docker ps -a 
-
-      - name: Wait for Airflow to Start
-        run: sleep 60  # Allow time for Airflow to initialize (adjust if needed)
-      
-      - name: Wait for Airflow to Start and Become Healthy
+      # Step 4: Wait for the Airflow webserver to be ready
+      - name: Wait for Airflow Webserver
         run: |
-          MAX_RETRIES=10
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' airflow)
-            if [ "$STATUS" = "healthy" ]; then
-              echo "Airflow is healthy!"
-              break
-            else
-              echo "Waiting for Airflow to become healthy... (Status: $STATUS)"
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              sleep 10
+          echo "Waiting for Airflow webserver to be ready..."
+          for i in {1..10}; do
+            if curl -s http://localhost:8080/health | grep -q '"status":"healthy"'; then
+              echo "Airflow webserver is healthy!"
+              exit 0
             fi
+            sleep 10
           done
+          echo "Airflow webserver did not become healthy in time."
+          exit 1
 
-          if [ "$STATUS" != "healthy" ]; then
-            echo "Airflow did not become healthy. Exiting."
-            docker logs airflow
+      # Step 5: Trigger the data_pipeline.py DAG
+      - name: Trigger data_pipeline.py DAG
+        run: |
+          docker exec -it airflow airflow dags trigger -d data_pipeline
+
+      # Step 6: Verify the DAG run status
+      - name: Verify DAG Run
+        run: |
+          echo "Waiting for DAG run to complete..."
+          docker exec -it airflow bash -c "
+            for i in {1..10}; do
+              if airflow dags state data_pipeline | grep -q 'success'; then
+                echo 'DAG run completed successfully!'
+                exit 0
+              fi
+              sleep 30
+            done
+            echo 'DAG run did not complete successfully in time.'
             exit 1
-          fi
-
-      
-      - name: Fix Permissions for Logs Directory
-        run: docker exec airflow chmod -R 777 /opt/airflow/logs
-
-      - name: Check Airflow Logs Directory Ownership
-        run: docker exec airflow ls -ld /opt/airflow/logs
-
-
-      - name: Check if container is running
-        run: |
-          docker ps -a
-          docker exec airflow airflow version
-      
-      - name: Trigger data_pipeline DAG
-        run: |
-          docker exec airflow airflow dags trigger data_pipeline
-      
-      - name: Check Airflow Logs
-        run: docker logs airflow
-
-      - name: Show DAG Status
-        run: docker exec airflow airflow dags list-runs -d data_pipeline
+          "

@@ -28,7 +28,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
       retries: 5
-      start_period: 10s
+      start_period: 60s
       timeout: 5s
     entrypoint: ["/bin/bash", "-c", "chmod -R 777 /opt/airflow/logs && /opt/airflow/entrypoint.sh"]
     
