@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # Set permissions for the logs directory
-chmod -R 775 /opt/airflow/logs
-chown -R airflow:airflow /opt/airflow/logs
+
 # Initialize the Airflow database
 airflow db init
 
