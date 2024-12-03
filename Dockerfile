@@ -47,7 +47,7 @@ USER root
 RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
 
 # Create airflow user and group (if not already created)
-RUN groupadd -r airflow && useradd -r -g airflow airflow
+#RUN groupadd -r airflow && useradd -r -g airflow airflow
 
 # Switch to airflow user to install dependencies
 USER airflow
