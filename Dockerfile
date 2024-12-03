@@ -31,40 +31,26 @@
 # Use the official Apache Airflow image as a base
 FROM apache/airflow:2.7.2-python3.10
 
-# Copy DAGs
-COPY dags/ /opt/airflow/dags/
-
 # Set Working Directory
 WORKDIR /opt/airflow
 
-# Copy requirements.txt
+# Copy DAGs and requirements file
+COPY dags/ /opt/airflow/dags/
 COPY requirements.txt /requirements.txt
 
-# Switch to root for managing directories and permissions
-USER root
-
-# Create logs directory and set permissions (this must be done as root)
-RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
-
-# Create airflow user and group (if not already created)
-#RUN groupadd -r airflow && useradd -r -g airflow airflow
-
-# Switch to airflow user to install dependencies
+# Install Python dependencies as airflow user
 USER airflow
-
-# Install Python dependencies as the airflow user
 RUN pip install --no-cache-dir -r /requirements.txt
 RUN pip install --no-cache-dir dvc[s3]  # Install DVC with optional S3 support
 
-# Switch back to root to handle the permissions for the logs
+
+# Switch to root to allow modification of directories
 USER root
+RUN chmod -R 775 /opt/airflow/logs
 
-# Ensure airflow user can access logs
-RUN chown -R airflow:airflow /opt/airflow/logs
-
-# Switch to airflow user for running Airflow processes
-USER airflow
-
-# Copy entrypoint.sh and make it executable
+# Ensure entrypoint.sh is executable
 COPY entrypoint.sh /opt/airflow/entrypoint.sh
 RUN chmod +x /opt/airflow/entrypoint.sh
+
+# Switch back to airflow user for running Airflow processes
+USER airflow
