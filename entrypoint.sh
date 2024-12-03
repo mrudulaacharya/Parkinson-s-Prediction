@@ -21,7 +21,7 @@ airflow users create --username smp1699 --firstname Mrudula --lastname Acharya -
 # chown -R airflow:airflow /opt/airflow/logs
 # chown -R airflow:airflow /opt/airflow/dags
 
-
+chmod -R 777 /opt/airflow/log
 airflow scheduler &
 
 sleep 60

@@ -91,6 +91,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y docker-compose
 
+      - name: Set Permissions for Logs Directory
+        run: chmod -R 777 ./logs
+
       - name: Start Airflow
         run: |
           docker-compose down || true  # Stop any existing Airflow containers
@@ -101,10 +104,17 @@ jobs:
 
       - name: Wait for Airflow to Start
         run: sleep 30  # Allow time for Airflow to initialize (adjust if needed)
-      - name: Set permissions for Airflow log directories
+      
+      # - name: Set permissions for Airflow log directories
+      #   run: mkdir -p /opt/airflow/logs/scheduler/$(date +%Y-%m-%d)
+      
+      - name: Fix Permissions for Logs Directory
         run: |
-              mkdir -p /opt/airflow/logs/scheduler/$(date +%Y-%m-%d)
-            # sudo chown -R airflow:airflow /opt/airflow/logs
+        docker exec airflow chmod -R 777 /opt/airflow/logs
+
+      - name: Check Airflow Logs Directory Ownership
+        run: docker exec airflow ls -ld /opt/airflow/logs
+
 
       - name: Check if container is running
         run: |
