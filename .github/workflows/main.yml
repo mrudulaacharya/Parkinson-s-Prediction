@@ -104,7 +104,7 @@ jobs:
       - name: Set permissions for Airflow log directories
         run: |
               mkdir -p /opt/airflow/logs/scheduler/$(date +%Y-%m-%d)
-              sudo chown -R airflow:airflow /opt/airflow/logs
+            # sudo chown -R airflow:airflow /opt/airflow/logs
 
       - name: Check if container is running
         run: |

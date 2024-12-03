@@ -12,6 +12,7 @@ COPY requirements.txt /requirements.txt
 
 # Switch to root, set permissions, then switch back to airflow user
 USER airflow
+#RUN groupadd -g 1000 airflow && useradd -u 1000 -g airflow -m airflow
 
 RUN pip install --no-cache-dir -r /requirements.txt
 RUN pip install --no-cache-dir dvc[s3]  # Install DVC with optional S3 support
