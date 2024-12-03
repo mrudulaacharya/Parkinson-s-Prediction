@@ -149,7 +149,9 @@ jobs:
       # Step 6: Trigger the data_pipeline.py DAG
       - name: Trigger data_pipeline.py DAG
         run: |
-          docker exec -it airflow airflow dags trigger -d data_pipeline
+# docker exec -it airflow airflow dags trigger -d data_pipeline
+          docker exec airflow airflow dags trigger -d data_pipeline
+
 
       # Step 7: Verify the DAG run status
       - name: Verify DAG Run
