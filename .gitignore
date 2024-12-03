@@ -4,7 +4,7 @@ motor_assessments/
 outputs/
 models/
 airflow.db
-logs/
+
 mlruns/
 cleaned_to_merge
 # Ignore DVC cache (can be very large)
