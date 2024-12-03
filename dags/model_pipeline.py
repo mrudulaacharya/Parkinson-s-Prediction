@@ -153,7 +153,7 @@ def train_and_tune_model(model, param_grid, model_name, X_train, y_train, X_val,
         return best_model
     
 def evaluate_on_test_set(model, X_test, y_test):
-    # Set tracking URI and experiment tracking 
+    # Set tracking URI and experiment tracking .
     mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
     mlflow.set_experiment("Model_Testing")
     with mlflow.start_run(run_name=f"Test_{model.__class__.__name__}"):
