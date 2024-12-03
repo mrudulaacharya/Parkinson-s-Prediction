@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Set permissions for the logs directory
-
+chmod -R 777 /opt/airflow/logs
+chmod -R 777 /opt/airflow/raw_data
+chmod -R 777 /opt/airflow/motor_assessments
+chmod -R 777 /opt/airflow/outputs
+chmod -R 777 /opt/airflow/models
+chmod -R 777 /opt/airflow/mlruns
+chmod -R 777 /opt/airflow/.dvc
 # Initialize the Airflow database
 airflow db init
 
