@@ -19,10 +19,9 @@ RUN pip install --no-cache-dir dvc[s3]  # Install DVC with optional S3 support
 USER root
 
 RUN apt-get update && apt-get install -y git 
-
-
+RUN mkdir -p /opt/airflow/logs && chown -R airflow:airflow /opt/airflow/logs && chmod -R 775 /opt/airflow/logs
 # Ensure logs directory has the right permissions
-RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
+#RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
 COPY entrypoint.sh /opt/airflow/entrypoint.sh
 RUN chmod +x /opt/airflow/entrypoint.sh
 USER airflow
