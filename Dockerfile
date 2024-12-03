@@ -46,7 +46,7 @@ RUN pip install --no-cache-dir dvc[s3]  # Install DVC with optional S3 support
 
 # Switch to root to allow modification of directories
 USER root
-RUN chmod -R 775 /opt/airflow/logs
+#RUN chmod -R 775 /opt/airflow/logs
 
 # Ensure entrypoint.sh is executable
 COPY entrypoint.sh /opt/airflow/entrypoint.sh

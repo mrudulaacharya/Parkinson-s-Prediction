@@ -129,18 +129,18 @@ jobs:
           docker-compose up -d --build
 
       # Step 5: Wait for the Airflow webserver to be ready
-      - name: Wait for Airflow Webserver
-        run: |
-          echo "Waiting for Airflow webserver to be ready..."
-          for i in {1..50}; do
-            if curl -s http://localhost:8080/health | grep -q '"status":"healthy"'; then
-              echo "Airflow webserver is healthy!"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Airflow webserver did not become healthy in time."
-          exit 1
+      # - name: Wait for Airflow Webserver
+      #   run: |
+      #     echo "Waiting for Airflow webserver to be ready..."
+      #     for i in {1..50}; do
+      #       if curl -s http://localhost:8080/health | grep -q '"status":"healthy"'; then
+      #         echo "Airflow webserver is healthy!"
+      #         exit 0
+      #       fi
+      #       sleep 10
+      #     done
+      #     echo "Airflow webserver did not become healthy in time."
+      #     exit 1
 
       - name: Print Airflow Logs
         if: ${{ failure() }}

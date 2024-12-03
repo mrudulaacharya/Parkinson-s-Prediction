@@ -51,7 +51,7 @@ dag = DAG(
     catchup=False,
 )
 
-# Custom email alert function.
+# Custom email alert function..
 def send_custom_alert_email(status, task_id, dag_id, **context):
     subject = f"Airflow Task Alert - {status.capitalize()}"
     body = f"Task {task_id} in DAG {dag_id} has {status}."
