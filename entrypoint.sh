@@ -6,7 +6,8 @@ airflow db init
 
 # Create an Airflow user (if not already created)
 airflow users create --username smp1699 --firstname Mrudula --lastname Acharya --role Admin --email mrudulaacharya18@gmail.com --password smp1699
-
+# Set permissions for the logs directory
+chmod -R 777 /opt/airflow/logs
 airflow scheduler &
 
 sleep 60
