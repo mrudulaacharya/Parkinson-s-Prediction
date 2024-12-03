@@ -20,9 +20,9 @@ USER root
 
 RUN apt-get update && apt-get install -y git 
 
-# Set proper permissions for the logs directory
-#RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
 
+# Ensure logs directory has the right permissions
+RUN mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow/logs
 COPY entrypoint.sh /opt/airflow/entrypoint.sh
 RUN chmod +x /opt/airflow/entrypoint.sh
 USER airflow
