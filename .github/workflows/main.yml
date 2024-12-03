@@ -143,8 +143,8 @@ jobs:
           exit 1
 
       - name: Print Airflow Logs
-          if: ${{ failure() }}
-          run: docker logs airflow
+        if: ${{ failure() }}
+        run: docker logs airflow
 
       # Step 6: Trigger the data_pipeline.py DAG
       - name: Trigger data_pipeline.py DAG
