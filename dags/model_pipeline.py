@@ -95,7 +95,7 @@ def validate_data(**context):
     # 3. Null Values Check
     if df1.isnull().any().any():
         raise ValueError("Data contains missing values!")
-    #context['ti'].xcom_push(key='df', value=df)
+    #context['ti'].xcom_push(key='df', value=df).
 
     return True
     
