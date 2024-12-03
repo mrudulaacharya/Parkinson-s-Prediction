@@ -109,8 +109,7 @@ jobs:
       #   run: mkdir -p /opt/airflow/logs/scheduler/$(date +%Y-%m-%d)
       
       - name: Fix Permissions for Logs Directory
-        run: |
-        docker exec airflow chmod -R 777 /opt/airflow/logs
+        run: docker exec airflow chmod -R 777 /opt/airflow/logs
 
       - name: Check Airflow Logs Directory Ownership
         run: docker exec airflow ls -ld /opt/airflow/logs
