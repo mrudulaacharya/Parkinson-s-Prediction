@@ -106,10 +106,8 @@ jobs:
         run: docker ps -a 
 
       - name: Wait for Airflow to Start
-        run: sleep 30  # Allow time for Airflow to initialize (adjust if needed)
+        run: sleep 60  # Allow time for Airflow to initialize (adjust if needed)
       
-      # - name: Set permissions for Airflow log directories
-      #   run: mkdir -p /opt/airflow/logs/scheduler/$(date +%Y-%m-%d)
       
       - name: Fix Permissions for Logs Directory
         run: docker exec airflow chmod -R 777 /opt/airflow/logs
