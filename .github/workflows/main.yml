@@ -129,15 +129,15 @@ jobs:
           docker-compose up -d --build
 
   
-      - name: Print Airflow Logs
-        if: ${{ failure() }}
-        run: docker logs airflow
 
       # Step 6: Trigger the data_pipeline.py DAG
       - name: Trigger data_pipeline.py DAG
         run: |
           docker exec airflow airflow dags trigger data_pipeline
 
+      - name: Print Airflow Logs
+        if: ${{ failure() }}
+        run: docker logs airflow
 
       # Step 7: Verify the DAG run status
       - name: Verify DAG Run
