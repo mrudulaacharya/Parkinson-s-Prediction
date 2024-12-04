@@ -1023,22 +1023,22 @@ concatenate_df_target_task=PythonOperator(
 )
 
  # Task to log data with DVC
-dvc_log_task = BashOperator(
-        task_id='log_data_with_dvc',
-        bash_command="""
-        dvc add /opt/airflow/raw_data/Demographics_27Oct2024.csv && \
-        dvc add /opt/airflow/raw_data/Participant_Status_27Oct2024.csv && \
-        dvc add /opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv && \
-        dvc add /opt/airflow/motor_assessments/MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv && \
-        dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_I_27Oct2024.csv && \
-        dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv && \
-        dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_III_27Oct2024.csv && \
-        dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv && \
-        dvc add /opt/airflow/outputs/airflow_cleaned_data.csv && \
-        git add *.dvc dvc.yaml dvc.lock && \
-        git commit -m "Logged data automatically after Airflow pipeline"
-        """
-    )
+# dvc_log_task = BashOperator(
+#         task_id='log_data_with_dvc',
+#         bash_command="""
+#         dvc add /opt/airflow/raw_data/Demographics_27Oct2024.csv && \
+#         dvc add /opt/airflow/raw_data/Participant_Status_27Oct2024.csv && \
+#         dvc add /opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv && \
+#         dvc add /opt/airflow/motor_assessments/MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv && \
+#         dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_I_27Oct2024.csv && \
+#         dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv && \
+#         dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_III_27Oct2024.csv && \
+#         dvc add /opt/airflow/motor_assessments/MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv && \
+#         dvc add /opt/airflow/outputs/airflow_cleaned_data.csv && \
+#         git add *.dvc dvc.yaml dvc.lock && \
+#         git commit -m "Logged data automatically after Airflow pipeline"
+#         """
+#     )
 
 task_trigger_model_pipeline = TriggerDagRunOperator(
         task_id="trigger_model_pipeline",
@@ -1063,5 +1063,5 @@ load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
 [clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>filter_all_motor_senses_csvs_task>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>dvc_log_task>>task_trigger_model_pipeline>>task_send_alert_email
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_trigger_model_pipeline>>task_send_alert_email
 

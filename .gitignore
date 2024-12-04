@@ -17,4 +17,4 @@ venv/
 
 # Ignore Docker-related artifacts
 *.tar
-*.log
+*.logiam-sa-key.json
