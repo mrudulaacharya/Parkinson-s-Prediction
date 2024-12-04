@@ -14,6 +14,7 @@ services:
       - MLFLOW_TRACKING_URI=file:/opt/airflow/mlruns  # Set tracking URI to a local directory
       - EMAIL=mrudulaacharya18@gmail.com
       - EMAIL_PASSWORD=lhwnkkhmvptmjghx
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/iam-sa-key.json
     volumes:
       - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       - ./logs:/opt/airflow/logs   # Optional: log persistence
@@ -24,6 +25,7 @@ services:
       - ./mlruns:/opt/airflow/mlruns # Mount mlruns folder for MLflow tracking
       - ./.dvc:/opt/airflow/.dvc          # Mount DVC metadata folder
       - ./.git:/opt/airflow/.git 
+      - ./iam-sa-key.json:/opt/airflow/iam-sa-key.json
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
