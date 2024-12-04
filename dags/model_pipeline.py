@@ -25,6 +25,10 @@ import pickle
 from fairlearn.metrics import MetricFrame, demographic_parity_difference, equalized_odds_difference
 from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+from google.cloud import storage
+from google.cloud import aiplatform
+from sklearn.preprocessing import label_binarize
+
 folder_path = '/opt/airflow/models'
 
 # Set tracking server URI to a local directory
@@ -153,45 +157,62 @@ def train_and_tune_model(model, param_grid, model_name, X_train, y_train, X_val,
         return best_model
     
 def evaluate_on_test_set(model, X_test, y_test):
-    # Set tracking URI and experiment tracking .
+    # Set tracking URI and experiment tracking.
     mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
     mlflow.set_experiment("Model_Testing")
+
+    # Convert y_test to binary format for multiclass (One-vs-Rest strategy)
+    unique_classes = sorted(list(set(y_test)))
+    y_test_binary = label_binarize(y_test, classes=unique_classes)
+    n_classes = len(unique_classes)
+
     with mlflow.start_run(run_name=f"Test_{model.__class__.__name__}"):
         y_pred = model.predict(X_test)
-        
+
         # Calculate test accuracy and log it
         test_accuracy = accuracy_score(y_test, y_pred)
         mlflow.log_metric("test_accuracy", test_accuracy)
-        
-        # Print and log classification reports
-        report = classification_report(y_test, y_pred, output_dict=True)
-       
-        mlflow.log_metrics({"accuracy": report["accuracy"],
-                            "precision": report["weighted avg"]["precision"],
-                            "recall": report["weighted avg"]["recall"],
-                            "f1_score": report["weighted avg"]["f1-score"]})
-        
 
-        fpr, tpr, _ = roc_curve(y_test, model.predict_proba(X_test)[:, 1])
-        roc_auc = auc(fpr, tpr)
-        plt.figure()
-        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
-        plt.legend(loc="lower right")
-        plt.title("ROC Curve")
-        plt.savefig("/opt/airflow/outputs/roc_curve.png")
-        mlflow.log_artifact("/opt/airflow/outputs/roc_curve.png")
+        # Calculate ROC-AUC scores for each class (One-vs-Rest)
+        if hasattr(model, "predict_proba"):
+            y_score = model.predict_proba(X_test)
+            roc_auc_scores = {}
 
-        # Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred)
-        ConfusionMatrixDisplay(cm).plot()
-        plt.savefig("/opt/airflow/outputs/confusion_matrix.png")
-        mlflow.log_artifact("/opt/airflow/outputs/confusion_matrix.png")
-        
+            for i, class_label in enumerate(unique_classes):
+                fpr, tpr, _ = roc_curve(y_test_binary[:, i], y_score[:, i])
+                roc_auc = auc(fpr, tpr)
+                roc_auc_scores[class_label] = roc_auc
+
+                # Plot and save the ROC curve
+                plt.figure()
+                plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+                plt.legend(loc="lower right")
+                plt.title(f"ROC Curve for Class {class_label}")
+                plt.savefig(f"/opt/airflow/outputs/roc_curve_class_{class_label}.png")
+                mlflow.log_artifact(f"/opt/airflow/outputs/roc_curve_class_{class_label}.png")
+
+            # Log average AUC across all classes
+            avg_roc_auc = np.mean(list(roc_auc_scores.values()))
+            mlflow.log_metric("avg_roc_auc", avg_roc_auc)
+        else:
+            print("Model does not support predict_proba. Skipping ROC-AUC calculation.")
+
         # Log classification report as text for easy access
         report_text = classification_report(y_test, y_pred)
         print(f"Test Accuracy for {model.__class__.__name__}: {test_accuracy}")
         print(f"Classification Report:\n{report_text}")
-        
+
+        mlflow.log_metrics({
+            "accuracy": test_accuracy,
+        })
+        mlflow.log_text(report_text, "classification_report.txt")
+
+        # Confusion Matrix
+        cm = confusion_matrix(y_test, y_pred)
+        ConfusionMatrixDisplay(cm, display_labels=unique_classes).plot()
+        plt.savefig("/opt/airflow/outputs/confusion_matrix.png")
+        mlflow.log_artifact("/opt/airflow/outputs/confusion_matrix.png")
+
         return test_accuracy, report_text
 
 # Define functions that wrap the training and tuning function for each model
@@ -274,44 +295,62 @@ def tune_LR(**context):
     context['ti'].xcom_push(key=f"best_lr_model", value=lr_model_filename)
    
 def model_accuracies(**context):
+    # Set the tracking URI for MLflow
+    mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
+    
+    # Define the experiment name
+    experiment_name = "Model_Validation_Accuracies"
+    
+    # Ensure the experiment exists
+    if not mlflow.get_experiment_by_name(experiment_name):
+        mlflow.create_experiment(experiment_name)
+    
+    # Set the experiment to log runs
+    mlflow.set_experiment(experiment_name)
+    
     # Retrieve validation accuracies and models from XCom
-    svm_model = context['ti'].xcom_pull(key='best_svm_model', task_ids='tune_SVM')
-    svm=joblib.load(svm_model)
+    svm_model_path = context['ti'].xcom_pull(key='best_svm_model', task_ids='tune_SVM')
+    svm = joblib.load(svm_model_path)
 
-    rf_model = context['ti'].xcom_pull(key='best_rf_model', task_ids='tune_RF')
-    rf=joblib.load(rf_model)
-    xgb_model = context['ti'].xcom_pull(key='best_xgb_model', task_ids='tune_XGB')
-    xgb=joblib.load(xgb_model)
-    lr_model = context['ti'].xcom_pull(key='best_lr_model', task_ids='tune_LR')
-    lr=joblib.load(lr_model)
-    # Retrieve validation accuracies
-    svm_accuracy = svm.score(context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'),
-                                   context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'))
-    rf_accuracy = rf.score(context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'),
-                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'))
-    xgb_accuracy = xgb.score(context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'),
-                                   context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'))
-    lr_accuracy = lr.score(context['ti'].xcom_pull(key='X_val', task_ids='train_test_split'),
-                                 context['ti'].xcom_pull(key='y_val', task_ids='train_test_split'))
+    rf_model_path = context['ti'].xcom_pull(key='best_rf_model', task_ids='tune_RF')
+    rf = joblib.load(rf_model_path)
+
+    xgb_model_path = context['ti'].xcom_pull(key='best_xgb_model', task_ids='tune_XGB')
+    xgb = joblib.load(xgb_model_path)
+
+    lr_model_path = context['ti'].xcom_pull(key='best_lr_model', task_ids='tune_LR')
+    lr = joblib.load(lr_model_path)
+    
+    # Retrieve validation data
+    X_val = context['ti'].xcom_pull(key='X_val', task_ids='train_test_split')
+    y_val = context['ti'].xcom_pull(key='y_val', task_ids='train_test_split')
+
+    # Calculate validation accuracies
+    svm_accuracy = svm.score(X_val, y_val)
+    rf_accuracy = rf.score(X_val, y_val)
+    xgb_accuracy = xgb.score(X_val, y_val)
+    lr_accuracy = lr.score(X_val, y_val)
 
     # Store models and accuracies in a dictionary
     model_accuracies = {
-        'SVM': (svm_model, svm_accuracy),
-        'Random Forest': (rf_model, rf_accuracy),
-        'XGBoost': (xgb_model, xgb_accuracy),
-        'Logistic Regression': (lr_model, lr_accuracy)
+        'SVM': (svm_model_path, svm_accuracy),
+        'Random Forest': (rf_model_path, rf_accuracy),
+        'XGBoost': (xgb_model_path, xgb_accuracy),
+        'Logistic Regression': (lr_model_path, lr_accuracy)
     }
+
+    # Start an MLflow run
     with mlflow.start_run(run_name="Model_Validation_Accuracies"):
         for model_name, (model_path, accuracy) in model_accuracies.items():
             # Log the accuracy metric
             mlflow.log_metric(f"{model_name}_accuracy", accuracy)
-            # Log the model as an artifact
+            
+            # Log the model file as an artifact
             mlflow.log_artifact(model_path, artifact_path=f"models/{model_name}")
 
+    # Push the model accuracies to XCom
     context['ti'].xcom_push(key='model_accuracies', value=model_accuracies)
     return model_accuracies
-
-
 
 def bias_report(**context):
     # Set tracking URI and experiment
@@ -435,64 +474,83 @@ def bias_report(**context):
     return model_results
 
 def model_ranking(**context):
-    # Pull fairness report and validation data
     fairness_report = context['ti'].xcom_pull(key='bias_report', task_ids='bias_report')
     model_accuracies = context['ti'].xcom_pull(key='model_accuracies', task_ids='model_accuracies')
-    
+
+    if not fairness_report:
+        raise ValueError("Fairness report not found or empty in XCom.")
+    if not model_accuracies:
+        raise ValueError("Model accuracies not found or empty in XCom.")
+
     model_fairness_penalties = {}
 
-    # Loop through the fairness report to calculate bias penalties
     for entry in fairness_report:
         model_name = entry['model']
         dp_diff = entry['dp_diff']
         eo_diff = entry['eo_diff']
-        
-        # Initialize the penalty for the model if not already done
+
         if model_name not in model_fairness_penalties:
             model_fairness_penalties[model_name] = []
 
-        # Append the absolute value of dp_diff and eo_diff (larger is worse)
         model_fairness_penalties[model_name].append(abs(dp_diff) + abs(eo_diff))
-    
-    # Step 2: Calculate the average penalty for each model
+
     for model_name in model_fairness_penalties:
         penalties = model_fairness_penalties[model_name]
-        average_penalty = np.mean(penalties)  # Average of all sensitive features for this model
-        model_fairness_penalties[model_name] = average_penalty
-    
-    # Step 3: Rank models based on both accuracy and fairness
+        model_fairness_penalties[model_name] = np.mean(penalties)
 
-    model_scores = []
-    
-    for model_name, (model, accuracy) in model_accuracies.items():
+    ranked_models = []
+    for model_name, (model_object, accuracy) in model_accuracies.items():
         fairness_penalty = model_fairness_penalties.get(model_name, 0)
-        # Calculate a score considering both accuracy and fairness penalty
         score = accuracy - 0.7 * fairness_penalty
-        model_scores.append((model_name, model,score))
-    
-    
-    # Step 4: Sort models based on the score (higher is better)
-    ranked_models = [(model_name,model,score) for model_name,model, score in sorted(model_scores, key=lambda x: x[1], reverse=True)]
-    
+
+        # Enhanced model type mapping
+        model_type = None
+        if "XGB" in model_name.upper() or "BOOST" in model_name.upper():
+            model_type = "xgboost"
+        elif "RF" in model_name.upper() or "FOREST" in model_name.upper():
+            model_type = "random_forest"
+        elif "LR" in model_name.upper() or "LOGISTIC" in model_name.upper():
+            model_type = "logistic_regression"
+        elif "SVM" in model_name.upper():
+            model_type = "svm"
+        else:
+            raise ValueError(f"Unrecognized model type for model_name: {model_name}")
+
+        ranked_models.append({
+            "model_name": model_name,
+            "model_object": model_object,
+            "score": score,
+            "model_type": model_type,
+        })
+
+    ranked_models = sorted(ranked_models, key=lambda x: x['score'], reverse=True)
     context['ti'].xcom_push(key='model_ranking', value=ranked_models)
     return ranked_models
 
 def select_best_model(**context):
+    # Retrieve the ranked models from XCom
+    model_ranking = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
 
-    model_ranking_df = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
-    
-    if  not model_ranking_df :
-        raise ValueError("Model ranking DataFrame not found or is empty in XCom.")
-    
-    best_model_name, best_model,score = model_ranking_df[0]
-    print("Best model:", best_model_name)
-    
-    # Push the best model's details to XCom
-    context['ti'].xcom_push(key='best_model', value=best_model)   
-    
-    context['ti'].xcom_push(key='best_model_name', value=best_model_name)    
-    
-    return best_model
+    if not model_ranking or len(model_ranking) == 0:
+        raise ValueError("Model ranking is empty or not found in XCom.")
+
+    # Extract the best model (first entry in sorted list)
+    best_model = model_ranking[0]
+    best_model_name = best_model["model_name"]
+    best_model_object = best_model["model_object"]
+    best_model_score = best_model["score"]
+    best_model_type = best_model["model_type"]
+
+    # Push the best model details to XCom
+    context['ti'].xcom_push(key='best_model', value=best_model_object)
+    context['ti'].xcom_push(key='best_model_name', value=best_model_name)
+    context['ti'].xcom_push(key='best_model_type', value=best_model_type)
+
+    # Log details for debugging
+    print(f"Best Model Selected:")
+    print(f"Name: {best_model_name}, Score: {best_model_score}, Type: {best_model_type}")
+
+    return best_model_object
 
 def test_best_model(**context):
     # Pull the best model from XCom
@@ -528,7 +586,117 @@ def register_best_model(**context):
         model_uri = f"runs:/{mlflow.active_run().info.run_id}/{model_path}"
         mlflow.register_model(model_uri, best_model_name)
         
-    print(f"Registered {best_model_name} as the best model.")    
+    print(f"Registered {best_model_name} as the best model.")
+
+def save_model_to_gcs(**context):
+    import os
+    from google.cloud import storage
+
+    # Set GCP credentials
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
+
+    # Retrieve the best model path and name from XCom
+    best_model_path = context['ti'].xcom_pull(key='best_model', task_ids='select_best_model')
+    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
+
+    # Define GCS bucket and directory path
+    gcs_bucket_name = "pp-model-bucket"
+    gcs_model_dir = f"{best_model_name}/"
+
+    try:
+        # Upload model to GCS
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket_name)
+        blob = bucket.blob(f"{gcs_model_dir}model.pkl")
+        blob.upload_from_filename(best_model_path)
+
+        print(f"Model saved to GCS: gs://{gcs_bucket_name}/{gcs_model_dir}")
+
+        # Push GCS directory path (not file) to XCom
+        context['ti'].xcom_push(key='gcs_model_path', value=f"gs://{gcs_bucket_name}/{gcs_model_dir}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to upload model to GCS: {str(e)}")
+
+
+def register_model_in_artifact_registry(**context):
+    import os
+    from google.cloud import aiplatform
+
+    # Set GCP credentials
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
+
+    # Retrieve model details from XCom
+    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
+    gcs_model_dir = context['ti'].xcom_pull(key='gcs_model_path', task_ids='save_model_to_gcs')
+    best_model_type = context['ti'].xcom_pull(key='best_model_type', task_ids='select_best_model')
+
+    # Map model types to serving container images
+    serving_container_images = {
+        "xgboost": "us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-5:latest",
+        "random_forest": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
+        "logistic_regression": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
+        "svm": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
+    }
+
+    serving_container_image = serving_container_images.get(best_model_type)
+    if not serving_container_image:
+        raise ValueError(f"No serving container image defined for model type: {best_model_type}")
+
+    # Initialize AI Platform
+    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
+
+    try:
+        # Register the model in Vertex AI Artifact Registry
+        model = aiplatform.Model.upload(
+            display_name=best_model_name,
+            artifact_uri=gcs_model_dir,
+            serving_container_image_uri=serving_container_image,
+        )
+        print(f"Model registered to Vertex AI: {model.resource_name}")
+
+        # Push model resource name to XCom
+        context['ti'].xcom_push(key='model_resource_name', value=model.resource_name)
+    except Exception as e:
+        raise RuntimeError(f"Failed to register model in Vertex AI: {str(e)}")
+
+def deploy_model_to_vertex_ai(**context):
+    import os
+    from google.cloud import aiplatform
+
+    # Set GCP credentials
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
+
+    # Retrieve model details from XCom
+    model_resource_name = context['ti'].xcom_pull(key='model_resource_name', task_ids='register_model_in_artifact_registry')
+    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
+
+    # Initialize AI Platform
+    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
+
+    try:
+        # Retrieve the Model object using the resource name
+        model = aiplatform.Model(model_resource_name)
+
+        # Check for existing endpoints with the same name
+        existing_endpoints = aiplatform.Endpoint.list(filter=f'display_name="{best_model_name}-endpoint"')
+        if existing_endpoints:
+            endpoint = existing_endpoints[0]
+            print(f"Using existing endpoint: {endpoint.resource_name}")
+        else:
+            # Create a new endpoint if it doesn't exist
+            endpoint = aiplatform.Endpoint.create(display_name=f"{best_model_name}-endpoint")
+            print(f"Created new endpoint: {endpoint.resource_name}")
+
+        # Deploy the model to the endpoint
+        endpoint.deploy(
+            model=model,
+            deployed_model_display_name=f"{best_model_name}-deployment",
+            machine_type="n1-standard-2",  # Adjust if needed
+            traffic_split={"0": 100},
+        )
+        print(f"Model deployed to Vertex AI endpoint: {endpoint.resource_name}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to deploy model to Vertex AI: {str(e)}")    
 
 get_data_from_data_pipeline_task = PythonOperator(
     task_id='get_data_from_data_pipeline',
@@ -652,7 +820,28 @@ task_send_alert_email = PythonOperator(
     dag=dag,
 )
 
+save_model_to_gcs_task = PythonOperator(
+    task_id='save_model_to_gcs',
+    python_callable=save_model_to_gcs,
+    provide_context=True,
+    dag=dag,
+)
+
+register_model_in_artifact_registry_task = PythonOperator(
+    task_id='register_model_in_artifact_registry',
+    python_callable=register_model_in_artifact_registry,
+    provide_context=True,
+    dag=dag,
+)
+
+deploy_model_to_vertex_ai_task = PythonOperator(
+    task_id='deploy_model_to_vertex_ai',
+    python_callable=deploy_model_to_vertex_ai,
+    provide_context=True,
+    dag=dag,
+)
+
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>>task_send_alert_email
