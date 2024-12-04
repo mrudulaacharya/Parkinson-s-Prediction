@@ -27,7 +27,7 @@ from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDis
 import matplotlib.pyplot as plt
 folder_path = '/opt/airflow/models'
 
-# Set tracking server URI to a local directory..
+# Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
 
 default_args = {
