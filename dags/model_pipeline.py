@@ -28,10 +28,7 @@ import matplotlib.pyplot as plt
 from google.cloud import storage
 from google.cloud import aiplatform
 from sklearn.preprocessing import label_binarize
-<<<<<<< HEAD
-=======
 import json
->>>>>>> 7b19f1f53ac42e17abdfc9d6fb35500e9fadfb60
 
 folder_path = '/opt/airflow/models'
 
@@ -876,12 +873,6 @@ deploy_model_to_vertex_ai_task = PythonOperator(
     dag=dag,
 )
 
-<<<<<<< HEAD
-get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
-[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
-[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>>task_send_alert_email
-=======
 test_predictions_on_vertex_ai_task = PythonOperator(
     task_id='test_predictions_on_vertex_ai',
     python_callable=test_predictions_on_vertex_ai,
@@ -893,4 +884,3 @@ get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_t
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
 [bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>> test_predictions_on_vertex_ai_task>>task_send_alert_email
->>>>>>> 7b19f1f53ac42e17abdfc9d6fb35500e9fadfb60
