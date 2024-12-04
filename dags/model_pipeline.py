@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 from google.cloud import storage
 from google.cloud import aiplatform
 from sklearn.preprocessing import label_binarize
+import json
 
 folder_path = '/opt/airflow/models'
 
@@ -696,7 +697,38 @@ def deploy_model_to_vertex_ai(**context):
         )
         print(f"Model deployed to Vertex AI endpoint: {endpoint.resource_name}")
     except Exception as e:
-        raise RuntimeError(f"Failed to deploy model to Vertex AI: {str(e)}")    
+        raise RuntimeError(f"Failed to deploy model to Vertex AI: {str(e)}")
+
+def test_predictions_on_vertex_ai(**context):
+    # Set GCP credentials and initialize Vertex AI
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
+    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
+
+    # Retrieve endpoint details from XCom
+    endpoint_id = context['ti'].xcom_pull(key='model_resource_name', task_ids='deploy_model_to_vertex_ai')
+
+    # Initialize endpoint
+    endpoint = aiplatform.Endpoint(endpoint_id)
+
+    # Retrieve test data from XCom
+    X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
+    y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
+
+    # Prepare the test input (assuming the model expects JSON format)
+    predictions = []
+    for instance in X_test:
+        instance_dict = {"features": instance.tolist()}  
+        response = endpoint.predict([instance_dict])
+        predictions.append(response.predictions)
+
+    # Log results
+    for idx, prediction in enumerate(predictions):
+        print(f"True Label: {y_test[idx]}, Prediction: {prediction}")
+
+    context['ti'].xcom_push(key='predictions', value=predictions)
+
+    return predictions
+
 
 get_data_from_data_pipeline_task = PythonOperator(
     task_id='get_data_from_data_pipeline',
@@ -841,7 +873,14 @@ deploy_model_to_vertex_ai_task = PythonOperator(
     dag=dag,
 )
 
+test_predictions_on_vertex_ai_task = PythonOperator(
+    task_id='test_predictions_on_vertex_ai',
+    python_callable=test_predictions_on_vertex_ai,
+    provide_context=True,
+    dag=dag,
+)
+
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>> test_predictions_on_vertex_ai_task>>task_send_alert_email
