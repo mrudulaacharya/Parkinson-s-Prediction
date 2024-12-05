@@ -102,6 +102,7 @@ on:
       - Dockerfile
       - entrypoint.sh
       - requirements.txt
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -139,7 +140,7 @@ jobs:
         if: ${{ failure() }}
         run: docker logs airflow
 
-      # Step 7: Verify the DAG run status
+      # Step 7: Verify the DAG run status.
       - name: Verify DAG Run
         run: |
           echo "Waiting for DAG run to complete..."

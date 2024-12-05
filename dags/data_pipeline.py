@@ -17,7 +17,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 import logging
 logging.basicConfig(level=logging.INFO)
-# Default arguments for the DAG
+# Default arguments for the DAG.
 default_args = {
     'owner': 'airflow',
     'retries': 1,
