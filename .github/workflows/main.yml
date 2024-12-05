@@ -1,4 +1,4 @@
-dags list-runs -d data_pipeline
+
 name: Deploy and Trigger Airflow DAG
 
 on:
@@ -47,7 +47,7 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             --name airflow-container \
             airflow
-            
+
       - name: Debug: List Running Containers
         run: |
           echo "Listing running containers for debugging:"
