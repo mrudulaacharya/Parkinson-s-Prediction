@@ -48,7 +48,7 @@ jobs:
             --name airflow-container \
             airflow
 
-      - name: Debug: List Running Containers
+      - name: Debug List Running Containers
         run: |
           echo "Listing running containers for debugging:"
           docker ps -a
