@@ -66,7 +66,7 @@ jobs:
           docker exec airflow-container airflow dags trigger data_pipeline
 
       
-      - name: Debug: Airflow Logs
+      - name: Debug Airflow Logs
         run: |
           echo "Fetching Airflow webserver logs for debugging:"
           docker logs airflow-container || true
