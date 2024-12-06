@@ -33,7 +33,7 @@ def load_model():
             # Load the model
             print(f"Loading model from gs://{bucket_name}/{file_name}")
             with blob.open("rb") as f:
-                loaded_model = pickle.load(f)
+                loaded_model = joblib.load(f)
 
             # Detect model type
             if hasattr(loaded_model, "predict") and hasattr(loaded_model, "fit"):
