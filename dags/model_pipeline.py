@@ -7,9 +7,6 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
-import pandas as pd
-import numpy as np
-import logging
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 import xgboost as xgb
 import mlflow
@@ -25,12 +22,21 @@ import pickle
 from fairlearn.metrics import MetricFrame, demographic_parity_difference, equalized_odds_difference
 from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from google.cloud import storage
-from google.cloud import aiplatform
+from google.cloud import storage, aiplatform
 from sklearn.preprocessing import label_binarize
 import json
+import logging
+import numpy as np
+import pandas as pd
+
 
 folder_path = '/opt/airflow/models'
+
+# Set GCP Environment Variables (ensure these are set in docker-compose.yml or passed securely)
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
+GCP_REGION = os.getenv("GCP_REGION")
+CLOUD_RUN_SERVICE_NAME = os.getenv("CLOUD_RUN_SERVICE_NAME")
+DOCKER_IMAGE_NAME = os.getenv("DOCKER_IMAGE_NAME")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -50,7 +56,7 @@ default_args = {
 dag = DAG(
     'model_pipeline',
     default_args=default_args,
-    description='Model pipeline with custom email alerts for task failures',
+    description='Model pipeline with custom email alerts for task failures and GCP integration',
     schedule_interval=timedelta(days=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
@@ -589,145 +595,146 @@ def register_best_model(**context):
         
     print(f"Registered {best_model_name} as the best model.")
 
-def save_model_to_gcs(**context):
-    import os
+def create_bucket_with_best_model_name(**context):
+    """Create a GCP bucket dynamically using the best model's name."""
     from google.cloud import storage
 
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve the best model path and name from XCom
-    best_model_path = context['ti'].xcom_pull(key='best_model', task_ids='select_best_model')
+    client = storage.Client()
     best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
+    if not best_model_name:
+        raise ValueError("Best model name not found in XCom.")
 
-    # Define GCS bucket and directory path
-    gcs_bucket_name = "pp-model-bucket"
-    gcs_model_dir = f"{best_model_name}/"
+    # Create a bucket name using the best model's name
+    bucket_name = f"{best_model_name.lower().replace(' ', '_')}_bucket"
 
+    # Create the bucket if it doesn't exist
     try:
-        # Upload model to GCS
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket_name)
-        blob = bucket.blob(f"{gcs_model_dir}model.pkl")
-        blob.upload_from_filename(best_model_path)
-
-        print(f"Model saved to GCS: gs://{gcs_bucket_name}/{gcs_model_dir}")
-
-        # Push GCS directory path (not file) to XCom
-        context['ti'].xcom_push(key='gcs_model_path', value=f"gs://{gcs_bucket_name}/{gcs_model_dir}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload model to GCS: {str(e)}")
-
-
-def register_model_in_artifact_registry(**context):
-    import os
-    from google.cloud import aiplatform
-
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve model details from XCom
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-    gcs_model_dir = context['ti'].xcom_pull(key='gcs_model_path', task_ids='save_model_to_gcs')
-    best_model_type = context['ti'].xcom_pull(key='best_model_type', task_ids='select_best_model')
-
-    # Map model types to serving container images
-    serving_container_images = {
-        "xgboost": "us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-5:latest",
-        "random_forest": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-        "logistic_regression": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-        "svm": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-    }
-
-    serving_container_image = serving_container_images.get(best_model_type)
-    if not serving_container_image:
-        raise ValueError(f"No serving container image defined for model type: {best_model_type}")
-
-    # Initialize AI Platform
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
-
-    try:
-        # Register the model in Vertex AI Artifact Registry
-        model = aiplatform.Model.upload(
-            display_name=best_model_name,
-            artifact_uri=gcs_model_dir,
-            serving_container_image_uri=serving_container_image,
-        )
-        print(f"Model registered to Vertex AI: {model.resource_name}")
-
-        # Push model resource name to XCom
-        context['ti'].xcom_push(key='model_resource_name', value=model.resource_name)
-    except Exception as e:
-        raise RuntimeError(f"Failed to register model in Vertex AI: {str(e)}")
-
-def deploy_model_to_vertex_ai(**context):
-    import os
-    from google.cloud import aiplatform
-
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve model details from XCom
-    model_resource_name = context['ti'].xcom_pull(key='model_resource_name', task_ids='register_model_in_artifact_registry')
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-
-    # Initialize AI Platform
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
-
-    try:
-        # Retrieve the Model object using the resource name
-        model = aiplatform.Model(model_resource_name)
-
-        # Check for existing endpoints with the same name
-        existing_endpoints = aiplatform.Endpoint.list(filter=f'display_name="{best_model_name}-endpoint"')
-        if existing_endpoints:
-            endpoint = existing_endpoints[0]
-            print(f"Using existing endpoint: {endpoint.resource_name}")
+        bucket = client.bucket(bucket_name)
+        if not bucket.exists():
+            client.create_bucket(bucket_name, location=GCP_REGION)
+            logging.info(f"Bucket {bucket_name} created successfully.")
         else:
-            # Create a new endpoint if it doesn't exist
-            endpoint = aiplatform.Endpoint.create(display_name=f"{best_model_name}-endpoint")
-            print(f"Created new endpoint: {endpoint.resource_name}")
-
-        # Deploy the model to the endpoint
-        endpoint.deploy(
-            model=model,
-            deployed_model_display_name=f"{best_model_name}-deployment",
-            machine_type="n1-standard-2",  # Adjust if needed
-            traffic_split={"0": 100},
-        )
-        print(f"Model deployed to Vertex AI endpoint: {endpoint.resource_name}")
+            logging.info(f"Bucket {bucket_name} already exists.")
     except Exception as e:
-        raise RuntimeError(f"Failed to deploy model to Vertex AI: {str(e)}")
+        raise RuntimeError(f"Error creating bucket {bucket_name}: {e}")
 
-def test_predictions_on_vertex_ai(**context):
-    # Set GCP credentials and initialize Vertex AI
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
+    # Push the bucket name to XCom for later use
+    context['ti'].xcom_push(key='bucket_name', value=bucket_name)
 
-    # Retrieve endpoint details from XCom
-    endpoint_id = context['ti'].xcom_pull(key='model_resource_name', task_ids='deploy_model_to_vertex_ai')
+def push_model_to_gcs_bucket(**context):
+    """Upload the selected best model to the dynamically created GCP bucket."""
 
-    # Initialize endpoint
-    endpoint = aiplatform.Endpoint(endpoint_id)
+    client = storage.Client()
+    bucket_name = context['ti'].xcom_pull(key='bucket_name', task_ids='create_bucket_with_best_model_name')
+    best_model_path = context['ti'].xcom_pull(key='best_model_path', task_ids='select_best_model')
 
-    # Retrieve test data from XCom
-    X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
-    y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
+    if not bucket_name or not best_model_path:
+        raise ValueError("Bucket name or best model path not found in XCom.")
 
-    # Prepare the test input (assuming the model expects JSON format)
-    predictions = []
-    for instance in X_test:
-        instance_dict = {"features": instance.tolist()}  
-        response = endpoint.predict([instance_dict])
-        predictions.append(response.predictions)
+    try:
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob('model.pkl')  # Save the model as model.pkl
+        blob.upload_from_filename(best_model_path)
+        logging.info(f"Model uploaded successfully to gs://{bucket_name}/model.pkl")
+    except Exception as e:
+        raise RuntimeError(f"Error uploading model to bucket {bucket_name}: {e}")
 
-    # Log results
-    for idx, prediction in enumerate(predictions):
-        print(f"True Label: {y_test[idx]}, Prediction: {prediction}")
+def deploy_flask_api_on_cloud_run(**context):
+    """Deploy a Flask API to Cloud Run."""
+    bucket_name = context['ti'].xcom_pull(key='bucket_name', task_ids='create_bucket_with_best_model_name')
+    if not bucket_name:
+        raise ValueError("Bucket name not found in XCom.")
 
-    context['ti'].xcom_push(key='predictions', value=predictions)
+    # Define Cloud Run deployment parameters
+    service_name = CLOUD_RUN_SERVICE_NAME
+    region = GCP_REGION
+    image_uri = f"gcr.io/{GCP_PROJECT_ID}/{DOCKER_IMAGE_NAME}:latest"
 
-    return predictions
+    # Deploy Cloud Run service using gcloud CLI
+    try:
+        deployment_command = (
+            f"gcloud run deploy {service_name} "
+            f"--image {image_uri} "
+            f"--region {region} "
+            f"--platform managed "
+            f"--allow-unauthenticated "
+            f"--set-env-vars BUCKET_NAME={bucket_name}"
+        )
+        logging.info(f"Deploying Flask API with command: {deployment_command}")
+        os.system(deployment_command)
+        logging.info(f"Flask API deployed successfully as {service_name}.")
+    except Exception as e:
+        raise RuntimeError(f"Error deploying Flask API to Cloud Run: {e}")
+
+def load_model_from_gcs(**context):
+    """Task to load the model from Google Cloud Storage."""
+    global model, model_type
+    bucket_name = os.getenv("BUCKET_NAME")
+    if not bucket_name:
+        raise ValueError("Environment variable 'BUCKET_NAME' is not set.")
+
+    file_name = "model.pkl"  # Path to the model file in the bucket
+    print(f"Loading model from GCS bucket: {bucket_name}, file: {file_name}")
+
+    # Initialize Google Cloud Storage client
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(file_name)
+
+    # Load the model
+    with blob.open("rb") as f:
+        loaded_model = pickle.load(f)
+
+    # Detect model type
+    if hasattr(loaded_model, "predict") and hasattr(loaded_model, "fit"):
+        if "xgboost" in str(type(loaded_model)).lower():
+            model_type = "xgboost"
+        elif "svm" in str(type(loaded_model)).lower():
+            model_type = "svm"
+        elif "randomforest" in str(type(loaded_model)).lower():
+            model_type = "rf"
+        elif "logisticregression" in str(type(loaded_model)).lower():
+            model_type = "logreg"
+        else:
+            model_type = "sklearn"
+        context['ti'].xcom_push(key='model', value=loaded_model)
+        context['ti'].xcom_push(key='model_type', value=model_type)
+    else:
+        raise ValueError(f"Unsupported model type: {type(loaded_model)}")
+    print(f"Model loaded successfully. Type: {model_type}")
+
+def predict_with_loaded_model(**context):
+    """Task to perform predictions using the loaded model."""
+    # Retrieve the model and model type from XCom
+    model = context['ti'].xcom_pull(key='model', task_ids='load_model_from_gcs')
+    model_type = context['ti'].xcom_pull(key='model_type', task_ids='load_model_from_gcs')
+
+    # Input data to predict
+    input_data = context['dag_run'].conf.get("input_data")  # Expecting input data from DagRun configuration
+    if not input_data:
+        raise ValueError("Input data not provided in DAG configuration.")
+
+    # Validate input shape
+    if not isinstance(input_data, list) or not all(isinstance(row, list) for row in input_data):
+        raise ValueError("Input data must be a 2D list.")
+
+    # Convert input to NumPy array
+    input_array = np.array(input_data)
+
+    # Perform predictions
+    if model_type in ["xgboost", "rf", "logreg", "svm"]:
+        predictions = model.predict(input_array)
+
+        # Include probabilities if available
+        response = {"predictions": predictions.tolist()}
+        if hasattr(model, "predict_proba") and model_type != "svm":  # SVM predict_proba is not always available
+            probabilities = model.predict_proba(input_array)
+            response["probabilities"] = probabilities.tolist()
+
+        print("Predictions generated successfully.")
+        context['ti'].xcom_push(key='predictions', value=response)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
 
 
 get_data_from_data_pipeline_task = PythonOperator(
@@ -852,30 +859,37 @@ task_send_alert_email = PythonOperator(
     dag=dag,
 )
 
-save_model_to_gcs_task = PythonOperator(
-    task_id='save_model_to_gcs',
-    python_callable=save_model_to_gcs,
+create_bucket_task = PythonOperator(
+    task_id='create_bucket_with_best_model_name',
+    python_callable=create_bucket_with_best_model_name,
     provide_context=True,
     dag=dag,
 )
 
-register_model_in_artifact_registry_task = PythonOperator(
-    task_id='register_model_in_artifact_registry',
-    python_callable=register_model_in_artifact_registry,
+push_model_task = PythonOperator(
+    task_id='push_model_to_gcs_bucket',
+    python_callable=push_model_to_gcs_bucket,
     provide_context=True,
     dag=dag,
 )
 
-deploy_model_to_vertex_ai_task = PythonOperator(
-    task_id='deploy_model_to_vertex_ai',
-    python_callable=deploy_model_to_vertex_ai,
+deploy_flask_task = PythonOperator(
+    task_id='deploy_flask_api_on_cloud_run',
+    python_callable=deploy_flask_api_on_cloud_run,
     provide_context=True,
     dag=dag,
 )
 
-test_predictions_on_vertex_ai_task = PythonOperator(
-    task_id='test_predictions_on_vertex_ai',
-    python_callable=test_predictions_on_vertex_ai,
+load_model_task = PythonOperator(
+    task_id='load_model_from_gcs',
+    python_callable=load_model_from_gcs,
+    provide_context=True,
+    dag=dag,
+)
+
+predict_task = PythonOperator(
+    task_id='predict_with_loaded_model',
+    python_callable=predict_with_loaded_model,
     provide_context=True,
     dag=dag,
 )
@@ -883,4 +897,4 @@ test_predictions_on_vertex_ai_task = PythonOperator(
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>> test_predictions_on_vertex_ai_task>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>create_bucket_task >> push_model_task >> deploy_flask_task>>load_model_task >> predict_task>>task_send_alert_email
