@@ -15,6 +15,10 @@ services:
       - EMAIL=mrudulaacharya18@gmail.com
       - EMAIL_PASSWORD=lhwnkkhmvptmjghx
       - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/iam-sa-key.json
+      - GCP_PROJECT_ID=driven-lore-443500-t9
+      - GCP_REGION=us-central1
+      - CLOUD_RUN_SERVICE_NAME=model-predict-api
+      - DOCKER_IMAGE_NAME=gcr.io/driven-lore-443500-t9/model-predict-api
     volumes:
       - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       - ./logs:/opt/airflow/logs   # Optional: log persistence
@@ -26,6 +30,8 @@ services:
       - ./.dvc:/opt/airflow/.dvc          # Mount DVC metadata folder
       - ./.git:/opt/airflow/.git 
       - ./iam-sa-key.json:/opt/airflow/iam-sa-key.json
+      # New Volume for Cloud Run Deployment Scripts
+      - ./cloud_run:/opt/airflow/cloud_run
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s

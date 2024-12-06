@@ -67,27 +67,3 @@ The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI
 ![WhatsApp Image 2024-11-05 at 23 45 16_95809d38](https://github.com/user-attachments/assets/594b4ec5-9ee6-417f-8f67-6e16da2f5f2f)
 ![WhatsApp Image 2024-11-05 at 23 43 29_8baaf474](https://github.com/user-attachments/assets/cccacb79-1bf9-4546-8728-4b093913605e)
 
-## Bias Detection and Mitigation
-![1](https://github.com/user-attachments/assets/297ae311-24c7-4ad8-b4fd-77f18ef675d8)
-![2](https://github.com/user-attachments/assets/1d49c8f4-faed-42d4-847a-41b6bdf44dc1)
-![3](https://github.com/user-attachments/assets/e94069ca-dffc-4ef8-a931-b450374fa4e4)
-
-Based on the generated graphs, the dataset shows several notable imbalances across age, gender, and cohort attributes. 
-
-In the age distribution histogram, the majority of participants fall between ages 60 and 75, with relatively few data points under 50 or over 80. This concentration suggests that younger and older age groups are underrepresented, which could lead the model to perform well only within the dominant age range (60-75) and struggle with age extremes, potentially limiting accuracy for outliers in age-sensitive applications.
-
-The gender distribution bar chart shows a clear imbalance, with approximately 70% of participants identified as one gender, while only 30% represent the other. This disparity could cause the model to favor predictions for the overrepresented gender, leading to biased performance that may be less accurate for the minority gender.
-
-In the cohort distribution chart, one cohort comprises nearly 60% of the dataset, while other cohorts collectively represent the remaining 40%. Such an imbalance implies that the model may inadvertently learn patterns unique to the dominant cohort, resulting in reduced performance when predicting outcomes for less represented groups. Addressing these imbalances by enhancing the representation of underrepresented age groups, genders, and cohorts would help ensure that the model can learn fairly and perform consistently across all subgroups.
-
-For mitigating these biases we can apply the following techniques:
-
-1. Resampling: Apply oversampling to underrepresented age groups, gender, and cohorts to balance the dataset, or consider undersampling majority groups if data collection is limited.
-
-2. Sample Weights: Assign higher weights to samples from underrepresented age groups, genders, and cohorts in the model’s training process, ensuring that each group contributes equally to model learning.
-
-3. Stratified Splits: Use stratified sampling on ENROLL_AGE, SEX, and COHORT when dividing the dataset into training, validation, and test sets, maintaining balanced subgroup representation across all sets.
-
-4. Feature Engineering: Add new categorical features, such as age bins (e.g., <50, 50-60, etc.) or cohort identifiers, to guide the model in recognizing specific patterns tied to age and cohort.
-
-5. Bias and Fairness Metrics: During evaluation, check model performance metrics like accuracy and recall separately for each age group, gender, and cohort, and apply fairness metrics to detect and correct biases across these subgroups.
