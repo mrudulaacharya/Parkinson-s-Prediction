@@ -14,7 +14,8 @@ cleaned_to_merge
 __pycache__/
 venv/
 .env
-
+motor_assessment/
+raw_data1/
 # Ignore Docker-related artifacts
 *.tar
 *.logiam-sa-key.json
