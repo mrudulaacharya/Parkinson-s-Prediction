@@ -29,12 +29,6 @@ To run this project, you need:
 9.	To access the airflow web UI: open http://localhost:8080 in your browser.
 10.	Trigger both DAGs: data_pipeline and model_pipeline
 11.	To view the model parameters, accuracy metrics, model metadata: paste 127.0.0.1:5000 in the browser
-12. Tag the Docker image for Google Cloud Run:
-   `docker tag my-flask-app gcr.io/<PROJECT-ID>/my-flask-app`
-13. Push the Docker image to Google Container Registry: `docker push gcr.io/<PROJECT-ID>/my-flask-app`
-14. Deploy the Docker image to Google Cloud Run:`
-gcloud run deploy predict-model --image gcr.io/<PROJECT-ID>/my-flask-app --platform managed --region us-central1 --allow-unauthenticated`
-15. Get the Cloud Run service URL: `gcloud run services describe predict-model --region us-central1 --format="value(status.url)"`
 
 
 ## Dataset
