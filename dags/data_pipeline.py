@@ -39,11 +39,11 @@ dag = DAG(
 )
 
 # Define file paths
-participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
-demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
+participant_status_path = '/opt/airflow/raw_data1/Participant_Status_05Dec2024.csv'
+demographics_path = '/opt/airflow/raw_data1/Demographics_05Dec2024.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data1/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
 # Directory where CSV files are stored.
-csv_directory = '/opt/airflow/motor_assessments/'
+csv_directory = '/opt/airflow/motor_assessment/'
 
 
 
@@ -271,44 +271,44 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
 # Load functions for each CSV file
 def load_motor_senses_1(**context):
     try:
-        logging.info("Loading motor senses data from MDS-UPDRS_Part_I_27Oct2024.csv")
+        logging.info("Loading motor senses data from MDS-UPDRS_Part_I")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 1: {str(e)}")
         raise
 
 def load_motor_senses_2(**context):
     try:
-        logging.info("Loading motor senses data from MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv")
+        logging.info("Loading motor senses data from MDS-UPDRS_Part_I_Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 2: {str(e)}")
         raise
 def load_motor_senses_3(**context):
     try:
-        logging.info("Loading motor senses data from MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv")
+        logging.info("Loading motor senses data from MDS_UPDRS_Part_II__Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 3: {str(e)}")
         raise
 
 def load_motor_senses_4(**context):
     try:
-        logging.info("Loading motor senses data from MDS-UPDRS_Part_III_27Oct2024.csv'")
+        logging.info("Loading motor senses data from MDS-UPDRS_Part_III")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 4: {str(e)}")
         raise
 
 def load_motor_senses_5(**context):
     try:
-        logging.info("Loading motor senses data from MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv")
+        logging.info("Loading motor senses data from MDS-UPDRS_Part_IV__Motor_Complications")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 5: {str(e)}")
         raise
@@ -716,8 +716,8 @@ def missing_values_impute_50percent_scaling(**context):
 
         # Categorical pipeline: Impute using KNN, then apply one-hot encoding
         categorical_pipeline = Pipeline(steps=[
-            ('knn_impute', KNNImputer(n_neighbors=5)),  # Apply KNN imputation to categorical columns with 5-50% missing values
-            ('one_hot', one_hot_encoder)  # One-hot encode categorical columns
+            ('knn_impute', KNNImputer(n_neighbors=5))  # Apply KNN imputation to categorical columns with 5-50% missing values
+            ,('one_hot', one_hot_encoder)  # One-hot encode categorical columns
         ])
 
         # Use ColumnTransformer to apply the different pipelines to numerical and categorical columns
@@ -729,10 +729,12 @@ def missing_values_impute_50percent_scaling(**context):
             remainder='passthrough'  # Keep other columns like date intact (without changes)
         )
         df_preprocessed = preprocessor.fit_transform(df)
+        #print(df_preprocessed)
         # Retrieve column names after one-hot encoding and scaling
         one_hot_feature_names = preprocessor.transformers_[1][1].named_steps['one_hot'].get_feature_names_out(categorical_cols)
         # Combine column names
-        all_feature_names = numerical_cols + one_hot_feature_names.tolist() + [col for col in df.columns if col not in numerical_cols + categorical_cols]
+        
+        all_feature_names = [numerical_cols] + one_hot_feature_names.tolist()+  [col for col in df.columns if col not in numerical_cols + categorical_cols]
         # Convert the ndarray to pandas DataFrame with proper column names
         df_preprocessed_df = pd.DataFrame(df_preprocessed.toarray(), columns=all_feature_names)
 
@@ -753,7 +755,7 @@ def concatenate_df_target(**context):
         
         target_col= context['ti'].xcom_pull(key='target_col', task_ids='seperate_target_values')
         df_final['COHORT']= target_col
-        df_final.to_csv('/opt/airflow/outputs/airflow_cleaned_data.csv', index=False)
+        df_final.to_csv('/opt/airflow/outputs/airflow_cleaned_data1.csv', index=False)
         df_final=df_final.to_json(orient='split')
         context['ti'].xcom_push(key='df_final', value= df_final)
         logging.info("Final dataset created")
