@@ -7,9 +7,7 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
-import pandas as pd
-import numpy as np
-import logging
+from airflow.operators.bash import BashOperator
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 import xgboost as xgb
 import mlflow
@@ -25,12 +23,25 @@ import pickle
 from fairlearn.metrics import MetricFrame, demographic_parity_difference, equalized_odds_difference
 from sklearn.metrics import roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from google.cloud import storage
-from google.cloud import aiplatform
+from google.cloud import storage, aiplatform
 from sklearn.preprocessing import label_binarize
 import json
+import logging
+import numpy as np
+import pandas as pd
+import requests
+
 
 folder_path = '/opt/airflow/models'
+
+# Set GCP Environment Variables (ensure these are set in docker-compose.yml or passed securely)
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
+GCP_REGION = os.getenv("GCP_REGION")
+DOCKER_IMAGE_NAME = os.getenv("DOCKER_IMAGE_NAME")
+GKE_CLUSTER_NAME = os.getenv("GKE_CLUSTER_NAME")
+GCP_ZONE = os.getenv("GCP_ZONE")
+GKE_DEPLOYMENT_NAME = os.getenv("GKE_DEPLOYMENT_NAME")
+GCP_ARTIFACT_REPO = os.getenv("GCP_ARTIFACT_REPO")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -44,13 +55,12 @@ default_args = {
         task_id=context['task_instance'].task_id,
         dag_id=context['task_instance'].dag_id,
         **context)
-
 }
 
 dag = DAG(
     'model_pipeline',
     default_args=default_args,
-    description='Model pipeline with custom email alerts for task failures',
+    description='Model pipeline with custom email alerts for task failures and GCP integration',
     schedule_interval=timedelta(days=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
@@ -529,43 +539,59 @@ def model_ranking(**context):
     return ranked_models
 
 def select_best_model(**context):
-    # Retrieve the ranked models from XCom
+    # Pull the model ranking from the previous task
     model_ranking = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
 
+    # Validate that the model ranking exists
     if not model_ranking or len(model_ranking) == 0:
         raise ValueError("Model ranking is empty or not found in XCom.")
-
-    # Extract the best model (first entry in sorted list)
+    
+    # Select the best model based on ranking
     best_model = model_ranking[0]
     best_model_name = best_model["model_name"]
-    best_model_object = best_model["model_object"]
-    best_model_score = best_model["score"]
-    best_model_type = best_model["model_type"]
-
-    # Push the best model details to XCom
-    context['ti'].xcom_push(key='best_model', value=best_model_object)
+    
+    # Dynamically map the model name to its saved file path
+    model_path_map = {
+        "SVM": context['ti'].xcom_pull(key='best_svm_model', task_ids='tune_SVM'),
+        "Random Forest": context['ti'].xcom_pull(key='best_rf_model', task_ids='tune_RF'),
+        "XGBoost": context['ti'].xcom_pull(key='best_xgb_model', task_ids='tune_XGB'),
+        "Logistic Regression": context['ti'].xcom_pull(key='best_lr_model', task_ids='tune_LR'),
+    }
+    
+    # Get the best model's file path
+    best_model_path = model_path_map.get(best_model_name)
+    if not best_model_path:
+        raise ValueError(f"No file path mapped for model: {best_model_name}")
+    
+    # Push the best model name and path to XCom
+    context['ti'].xcom_push(key='best_model_path', value=best_model_path)
     context['ti'].xcom_push(key='best_model_name', value=best_model_name)
-    context['ti'].xcom_push(key='best_model_type', value=best_model_type)
 
-    # Log details for debugging
-    print(f"Best Model Selected:")
-    print(f"Name: {best_model_name}, Score: {best_model_score}, Type: {best_model_type}")
-
-    return best_model_object
+    return best_model_path
 
 def test_best_model(**context):
-    # Pull the best model from XCom
-    best_model = context['ti'].xcom_pull(key="best_model",task_ids='select_best_model')
-    model=joblib.load(best_model)
+    # Pull the best model path from XCom
+    best_model = context['ti'].xcom_pull(key="best_model_path", task_ids='select_best_model')
 
+    if not best_model:
+        raise ValueError("Best model path is None. Ensure 'select_best_model' task ran successfully and pushed the model path to XCom.")
+
+    logging.info(f"Best model path retrieved: {best_model}")
+    model = joblib.load(best_model)  # Load the model
+
+    # Retrieve test data
     X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
     y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
 
-    # Evaluate test accuracy and classification report
+    if X_test is None or y_test is None:
+        raise ValueError("Test data (X_test or y_test) not found in XCom.")
+
+    # Evaluate the model
     test_accuracy, report_text = evaluate_on_test_set(model, X_test, y_test)
 
-    print(f"Test Accuracy for best model: {test_accuracy}")
-    print(f"Classification Report:\n{report_text}")
+    logging.info(f"Test Accuracy for the best model: {test_accuracy}")
+    logging.info(f"Classification Report:\n{report_text}")
+
     return test_accuracy, report_text
 
 def register_best_model(**context):
@@ -588,147 +614,6 @@ def register_best_model(**context):
         mlflow.register_model(model_uri, best_model_name)
         
     print(f"Registered {best_model_name} as the best model.")
-
-def save_model_to_gcs(**context):
-    import os
-    from google.cloud import storage
-
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve the best model path and name from XCom
-    best_model_path = context['ti'].xcom_pull(key='best_model', task_ids='select_best_model')
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-
-    # Define GCS bucket and directory path
-    gcs_bucket_name = "pp-model-bucket"
-    gcs_model_dir = f"{best_model_name}/"
-
-    try:
-        # Upload model to GCS
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket_name)
-        blob = bucket.blob(f"{gcs_model_dir}model.pkl")
-        blob.upload_from_filename(best_model_path)
-
-        print(f"Model saved to GCS: gs://{gcs_bucket_name}/{gcs_model_dir}")
-
-        # Push GCS directory path (not file) to XCom
-        context['ti'].xcom_push(key='gcs_model_path', value=f"gs://{gcs_bucket_name}/{gcs_model_dir}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload model to GCS: {str(e)}")
-
-
-def register_model_in_artifact_registry(**context):
-    import os
-    from google.cloud import aiplatform
-
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve model details from XCom
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-    gcs_model_dir = context['ti'].xcom_pull(key='gcs_model_path', task_ids='save_model_to_gcs')
-    best_model_type = context['ti'].xcom_pull(key='best_model_type', task_ids='select_best_model')
-
-    # Map model types to serving container images
-    serving_container_images = {
-        "xgboost": "us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-5:latest",
-        "random_forest": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-        "logistic_regression": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-        "svm": "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-0:latest",
-    }
-
-    serving_container_image = serving_container_images.get(best_model_type)
-    if not serving_container_image:
-        raise ValueError(f"No serving container image defined for model type: {best_model_type}")
-
-    # Initialize AI Platform
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
-
-    try:
-        # Register the model in Vertex AI Artifact Registry
-        model = aiplatform.Model.upload(
-            display_name=best_model_name,
-            artifact_uri=gcs_model_dir,
-            serving_container_image_uri=serving_container_image,
-        )
-        print(f"Model registered to Vertex AI: {model.resource_name}")
-
-        # Push model resource name to XCom
-        context['ti'].xcom_push(key='model_resource_name', value=model.resource_name)
-    except Exception as e:
-        raise RuntimeError(f"Failed to register model in Vertex AI: {str(e)}")
-
-def deploy_model_to_vertex_ai(**context):
-    import os
-    from google.cloud import aiplatform
-
-    # Set GCP credentials
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-
-    # Retrieve model details from XCom
-    model_resource_name = context['ti'].xcom_pull(key='model_resource_name', task_ids='register_model_in_artifact_registry')
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-
-    # Initialize AI Platform
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
-
-    try:
-        # Retrieve the Model object using the resource name
-        model = aiplatform.Model(model_resource_name)
-
-        # Check for existing endpoints with the same name
-        existing_endpoints = aiplatform.Endpoint.list(filter=f'display_name="{best_model_name}-endpoint"')
-        if existing_endpoints:
-            endpoint = existing_endpoints[0]
-            print(f"Using existing endpoint: {endpoint.resource_name}")
-        else:
-            # Create a new endpoint if it doesn't exist
-            endpoint = aiplatform.Endpoint.create(display_name=f"{best_model_name}-endpoint")
-            print(f"Created new endpoint: {endpoint.resource_name}")
-
-        # Deploy the model to the endpoint
-        endpoint.deploy(
-            model=model,
-            deployed_model_display_name=f"{best_model_name}-deployment",
-            machine_type="n1-standard-2",  # Adjust if needed
-            traffic_split={"0": 100},
-        )
-        print(f"Model deployed to Vertex AI endpoint: {endpoint.resource_name}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to deploy model to Vertex AI: {str(e)}")
-
-def test_predictions_on_vertex_ai(**context):
-    # Set GCP credentials and initialize Vertex AI
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/opt/airflow/iam-sa-key.json'
-    aiplatform.init(project="driven-lore-443500-t9", location="northamerica-northeast1")
-
-    # Retrieve endpoint details from XCom
-    endpoint_id = context['ti'].xcom_pull(key='model_resource_name', task_ids='deploy_model_to_vertex_ai')
-
-    # Initialize endpoint
-    endpoint = aiplatform.Endpoint(endpoint_id)
-
-    # Retrieve test data from XCom
-    X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
-    y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
-
-    # Prepare the test input (assuming the model expects JSON format)
-    predictions = []
-    for instance in X_test:
-        instance_dict = {"features": instance.tolist()}  
-        response = endpoint.predict([instance_dict])
-        predictions.append(response.predictions)
-
-    # Log results
-    for idx, prediction in enumerate(predictions):
-        print(f"True Label: {y_test[idx]}, Prediction: {prediction}")
-
-    context['ti'].xcom_push(key='predictions', value=predictions)
-
-    return predictions
-
 
 get_data_from_data_pipeline_task = PythonOperator(
     task_id='get_data_from_data_pipeline',
@@ -852,35 +737,137 @@ task_send_alert_email = PythonOperator(
     dag=dag,
 )
 
-save_model_to_gcs_task = PythonOperator(
-    task_id='save_model_to_gcs',
-    python_callable=save_model_to_gcs,
-    provide_context=True,
+prepare_image_folder_task = BashOperator(
+    task_id='prepare_image_folder',
+    bash_command="""
+    mkdir -p /opt/airflow/gcp_image && \
+    cp /opt/airflow/models/best_lr_model.pkl /opt/airflow/gcp_image/model.pkl
+    """,
     dag=dag,
 )
 
-register_model_in_artifact_registry_task = PythonOperator(
-    task_id='register_model_in_artifact_registry',
-    python_callable=register_model_in_artifact_registry,
-    provide_context=True,
+build_docker_image_task = BashOperator(
+    task_id='build_docker_image',
+    bash_command = """
+    export DOCKER_HOST=unix:///var/run/docker.sock &&
+    docker build \
+    -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest \
+    /opt/airflow/gcp_image""",
     dag=dag,
+    env={
+        'GCP_REGION': GCP_REGION,
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,
+        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,
+    },
 )
 
-deploy_model_to_vertex_ai_task = PythonOperator(
-    task_id='deploy_model_to_vertex_ai',
-    python_callable=deploy_model_to_vertex_ai,
-    provide_context=True,
+push_image_to_artifact_registry_task = BashOperator(
+    task_id='push_image_to_artifact_registry',
+    bash_command="""
+    # Authenticate the service account
+    gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
+    
+    # Set the GCP project
+    gcloud config set project ${GCP_PROJECT_ID} &&
+    
+    # Create Artifact Registry repository (skip if it already exists)
+    gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
+        --repository-format=docker \
+        --location=${GCP_REGION} \
+        --description="Docker repository" \
+        --project=${GCP_PROJECT_ID} \
+        --quiet || true &&
+
+    # Configure Docker to use gcloud as a credential helper
+    gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
+
+    # Push the Docker image to Artifact Registry
+    docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
+    """,
     dag=dag,
+    env={
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,     # Ensure this is defined in your DAG
+        'GCP_REGION': GCP_REGION,             # Ensure this is defined in your DAG
+        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,  # Replace with the image name
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,  # Replace with the repository name
+    },
 )
 
-test_predictions_on_vertex_ai_task = PythonOperator(
-    task_id='test_predictions_on_vertex_ai',
-    python_callable=test_predictions_on_vertex_ai,
-    provide_context=True,
+deploy_to_gke_task = BashOperator(
+    task_id='deploy_to_gke',
+    bash_command="""
+    DEPLOYMENT_FILE="{{ params.deployment_file }}"
+
+    # 1. Create the GKE Cluster
+    echo "Creating GKE cluster: ${GKE_CLUSTER_NAME}
+    gcloud container clusters create ${GKE_CLUSTER_NAME} --num-nodes=3 --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+
+    # 2. Obtain authentication credentials for kubectl
+    echo "Fetching GKE credentials for cluster: $CLUSTER_NAME"
+    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+
+    # 3. Verify authentication and connectivity
+    echo "Verifying connectivity to the GKE cluster"
+    kubectl get nodes
+
+    # 4. Deploy the Docker image using the deployment.yaml file
+    echo "Deploying application using $DEPLOYMENT_FILE"
+    kubectl apply -f ${DEPLOYMENT_FILE}
+
+    # 5. Expose the deployment with a LoadBalancer
+    echo "Exposing deployment as a LoadBalancer"
+    kubectl expose deployment model-deployment --type=LoadBalancer --port=80 --target-port=8080
+
+    # 6. Fetch the external IP of the LoadBalancer
+    echo "Fetching external IP of the LoadBalancer"
+    EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+    # Wait for the LoadBalancer IP to become available
+    while [ -z "$EXTERNAL_IP" ]; do
+        echo "Waiting for LoadBalancer IP..."
+        sleep 10
+        EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    done
+
+    echo "Application is accessible at: http://$EXTERNAL_IP"
+    """,
     dag=dag,
+    env={
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,
+        'GCP_REGION': GCP_REGION,
+        'GCP_ZONE': GCP_ZONE,              # Replace with your zone
+        'GKE_CLUSTER_NAME': GKE_CLUSTER_NAME,      # Replace with your cluster name
+        'DOCKER_IMAGE': "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
+        'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
+        "DEPLOYMENT_FILE": "/path/to/deployment.yaml",
+    },
+)
+
+test_inference_task = BashOperator(
+    task_id='test_inference',
+    bash_command="""
+    # Wait for the external IP to be assigned
+    external_ip=""
+    while [ -z "$external_ip" ]; do
+      echo "Waiting for end point..."
+      external_ip=$(kubectl get svc ${GKE_DEPLOYMENT_NAME} --output=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+      [ -z "$external_ip" ] && sleep 10
+    done
+    echo "Endpoint ready: $external_ip"
+
+    # Test inference
+    curl http://$external_ip/predict
+    """,
+    dag=dag,
+
+    env={
+        'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
+    },
 )
 
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>save_model_to_gcs_task>>register_model_in_artifact_registry_task>>deploy_model_to_vertex_ai_task>> test_predictions_on_vertex_ai_task>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>prepare_image_folder_task >> build_docker_image_task >> push_image_to_artifact_registry_task >> deploy_to_gke_task >> test_inference_task >>task_send_alert_email
