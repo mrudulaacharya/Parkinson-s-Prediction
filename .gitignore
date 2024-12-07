@@ -4,7 +4,7 @@ motor_assessments/
 outputs/
 models/
 airflow.db
-
+logs/
 mlruns/
 cleaned_to_merge
 # Ignore DVC cache (can be very large)
@@ -14,7 +14,8 @@ cleaned_to_merge
 __pycache__/
 venv/
 .env
-
+motor_assessment/
+raw_data1/
 # Ignore Docker-related artifacts
 *.tar
 *.logiam-sa-key.json

@@ -25,8 +25,8 @@ services:
     volumes:
       - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       - ./logs:/opt/airflow/logs   # Optional: log persistence
-      - ./raw_data:/opt/airflow/raw_data       # Mount 'raw_data' folder
-      - ./motor_assessments:/opt/airflow/motor_assessments  # Mount 'motor_assessments' folder
+      - ./raw_data1:/opt/airflow/raw_data1       # Mount 'raw_data' folder
+      - ./motor_assessment:/opt/airflow/motor_assessment  # Mount 'motor_assessments' folder
       - ./outputs:/opt/airflow/outputs # Mount 'output' folder
       - ./models:/opt/airflow/models
       - ./mlruns:/opt/airflow/mlruns # Mount mlruns folder for MLflow tracking
@@ -42,5 +42,5 @@ services:
       retries: 5
       start_period: 60s
       timeout: 5s
-    entrypoint: ["/bin/bash", "-c", "chmod -R 777 /opt/airflow/logs && /opt/airflow/entrypoint.sh"]
+    entrypoint: ["/bin/bash", "-c", "  /opt/airflow/entrypoint.sh"]
     
