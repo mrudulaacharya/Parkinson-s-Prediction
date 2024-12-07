@@ -539,35 +539,33 @@ def model_ranking(**context):
     return ranked_models
 
 def select_best_model(**context):
-    # Pull the model ranking from the previous task
+    # Retrieve the ranked models from XCom
+
+    """Select the best model based on ranking and push its details to XCom."""
+    # Retrieve the ranked models from XCom
     model_ranking = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
 
     # Validate that the model ranking exists
     if not model_ranking or len(model_ranking) == 0:
         raise ValueError("Model ranking is empty or not found in XCom.")
-    
-    # Select the best model based on ranking
+
+    # Select the best model (first entry in the ranking list)
     best_model = model_ranking[0]
     best_model_name = best_model["model_name"]
-    
-    # Dynamically map the model name to its saved file path
-    model_path_map = {
-        "SVM": context['ti'].xcom_pull(key='best_svm_model', task_ids='tune_SVM'),
-        "Random Forest": context['ti'].xcom_pull(key='best_rf_model', task_ids='tune_RF'),
-        "XGBoost": context['ti'].xcom_pull(key='best_xgb_model', task_ids='tune_XGB'),
-        "Logistic Regression": context['ti'].xcom_pull(key='best_lr_model', task_ids='tune_LR'),
-    }
-    
-    # Get the best model's file path
-    best_model_path = model_path_map.get(best_model_name)
-    if not best_model_path:
-        raise ValueError(f"No file path mapped for model: {best_model_name}")
-    
-    # Push the best model name and path to XCom
-    context['ti'].xcom_push(key='best_model_path', value=best_model_path)
-    context['ti'].xcom_push(key='best_model_name', value=best_model_name)
+    best_model_object = best_model["model_object"]
+    best_model_score = best_model["score"]
+    best_model_type = best_model["model_type"]
 
-    return best_model_path
+    # Log the details of the best model for debugging
+    logging.info(f"Best Model Selected: Name: {best_model_name}, Score: {best_model_score}, Type: {best_model_type}")
+
+    # Push the best model details to XCom for downstream tasks
+    context['ti'].xcom_push(key='best_model', value=best_model_object)
+    context['ti'].xcom_push(key='best_model_name', value=best_model_name)
+    context['ti'].xcom_push(key='best_model_type', value=best_model_type)
+    context['ti'].xcom_push(key='best_model_path', value=f"/opt/airflow/models/{best_model_name.lower().replace(' ', '_')}.pkl")
+
+    return best_model_object
 
 def test_best_model(**context):
     # Pull the best model path from XCom
