@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 import logging
+import joblib
 logging.basicConfig(level=logging.INFO)
 # Default arguments for the DAG.
 default_args = {
@@ -689,8 +690,8 @@ def drop_correlated_unrelated_columns(**context):
                 raise
 
 
-def missing_values_impute_50percent_scaling(**context):
-
+def missing_values_impute_50percent_scaling(**context):      
+        
     try:
         logging.info("Imputing missing values 50%")
     
@@ -716,8 +717,8 @@ def missing_values_impute_50percent_scaling(**context):
 
         # Categorical pipeline: Impute using KNN, then apply one-hot encoding
         categorical_pipeline = Pipeline(steps=[
-            ('knn_impute', KNNImputer(n_neighbors=5))  # Apply KNN imputation to categorical columns with 5-50% missing values
-            ,('one_hot', one_hot_encoder)  # One-hot encode categorical columns
+            ('knn_impute', KNNImputer(n_neighbors=5)),  # Apply KNN imputation to categorical columns with 5-50% missing values
+            ('one_hot', one_hot_encoder)  # One-hot encode categorical columns
         ])
 
         # Use ColumnTransformer to apply the different pipelines to numerical and categorical columns
@@ -729,22 +730,23 @@ def missing_values_impute_50percent_scaling(**context):
             remainder='passthrough'  # Keep other columns like date intact (without changes)
         )
         df_preprocessed = preprocessor.fit_transform(df)
-        #print(df_preprocessed)
+
+        preprocessor_filename = f"/opt/airflow/models/preprocessor.pkl"
+        joblib.dump(preprocessor, preprocessor_filename)
         # Retrieve column names after one-hot encoding and scaling
         one_hot_feature_names = preprocessor.transformers_[1][1].named_steps['one_hot'].get_feature_names_out(categorical_cols)
         # Combine column names
-        
-        all_feature_names = [numerical_cols] + one_hot_feature_names.tolist()+  [col for col in df.columns if col not in numerical_cols + categorical_cols]
+        all_feature_names = numerical_cols + one_hot_feature_names.tolist() + [col for col in df.columns if col not in numerical_cols + categorical_cols]
         # Convert the ndarray to pandas DataFrame with proper column names
         df_preprocessed_df = pd.DataFrame(df_preprocessed.toarray(), columns=all_feature_names)
 
         context['ti'].xcom_push(key='missing_values_impute_50percent_scaling_df', value= df_preprocessed_df)
         logging.info("Imputed missing values 50%")
         return df_preprocessed_df
+    
     except Exception as e:
                 logging.error(f"Missing_values_impute_50percent   {str(e)}")
                 raise
-
 
 def concatenate_df_target(**context):
 

@@ -536,26 +536,29 @@ def model_ranking(**context):
 
 def select_best_model(**context):
     # Retrieve the ranked models from XCom
+
+    """Select the best model based on ranking and push its details to XCom."""
+    # Retrieve the ranked models from XCom
     model_ranking = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
 
     if not model_ranking or len(model_ranking) == 0:
         raise ValueError("Model ranking is empty or not found in XCom.")
 
-    # Extract the best model (first entry in sorted list)
+    # Select the best model (first entry in the ranking list)
     best_model = model_ranking[0]
     best_model_name = best_model["model_name"]
     best_model_object = best_model["model_object"]
     best_model_score = best_model["score"]
     best_model_type = best_model["model_type"]
 
-    # Push the best model details to XCom
+    # Log the details of the best model for debugging
+    logging.info(f"Best Model Selected: Name: {best_model_name}, Score: {best_model_score}, Type: {best_model_type}")
+
+    # Push the best model details to XCom for downstream tasks
     context['ti'].xcom_push(key='best_model', value=best_model_object)
     context['ti'].xcom_push(key='best_model_name', value=best_model_name)
     context['ti'].xcom_push(key='best_model_type', value=best_model_type)
-
-    # Log details for debugging
-    print(f"Best Model Selected:")
-    print(f"Name: {best_model_name}, Score: {best_model_score}, Type: {best_model_type}")
+    context['ti'].xcom_push(key='best_model_path', value=f"/opt/airflow/models/{best_model_name.lower().replace(' ', '_')}.pkl")
 
     return best_model_object
 
@@ -599,45 +602,61 @@ def create_bucket_with_best_model_name(**context):
     """Create a GCP bucket dynamically using the best model's name."""
     from google.cloud import storage
 
+    # Initialize the Google Cloud Storage client
     client = storage.Client()
+    
+    # Retrieve the best model name from XCom
     best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
     if not best_model_name:
         raise ValueError("Best model name not found in XCom.")
 
-    # Create a bucket name using the best model's name
+    # Generate a unique bucket name using the model's name
     bucket_name = f"{best_model_name.lower().replace(' ', '_')}_bucket"
+    print(f"Generated bucket name: {bucket_name}")
 
-    # Create the bucket if it doesn't exist
+    # Attempt to create the bucket
     try:
         bucket = client.bucket(bucket_name)
-        if not bucket.exists():
-            client.create_bucket(bucket_name, location=GCP_REGION)
-            logging.info(f"Bucket {bucket_name} created successfully.")
+        if bucket.exists():
+            logging.info(f"Bucket '{bucket_name}' already exists.")
         else:
-            logging.info(f"Bucket {bucket_name} already exists.")
+            # Use the create_bucket method with required parameters
+            client.create_bucket(bucket_name, location=GCP_REGION)
+            logging.info(f"Bucket '{bucket_name}' created successfully in region '{GCP_REGION}'.")
     except Exception as e:
-        raise RuntimeError(f"Error creating bucket {bucket_name}: {e}")
+        raise RuntimeError(f"Failed to create bucket '{bucket_name}': {str(e)}")
 
     # Push the bucket name to XCom for later use
     context['ti'].xcom_push(key='bucket_name', value=bucket_name)
 
+   
+
 def push_model_to_gcs_bucket(**context):
     """Upload the selected best model to the dynamically created GCP bucket."""
 
+    from google.cloud import storage
+
+    # Initialize the Google Cloud Storage client
     client = storage.Client()
+
+    # Retrieve the bucket name and best model path from XCom
     bucket_name = context['ti'].xcom_pull(key='bucket_name', task_ids='create_bucket_with_best_model_name')
     best_model_path = context['ti'].xcom_pull(key='best_model_path', task_ids='select_best_model')
 
-    if not bucket_name or not best_model_path:
-        raise ValueError("Bucket name or best model path not found in XCom.")
+    if not bucket_name:
+        raise ValueError("Bucket name not found in XCom. Ensure 'create_bucket_with_best_model_name' task ran successfully.")
+    if not best_model_path:
+        raise ValueError("Best model path not found in XCom. Ensure 'select_best_model' task provided the model path.")
 
+    # Attempt to upload the model file
     try:
         bucket = client.bucket(bucket_name)
-        blob = bucket.blob('model.pkl')  # Save the model as model.pkl
+        blob = bucket.blob('model.pkl')  # Save the model as 'model.pkl'
         blob.upload_from_filename(best_model_path)
-        logging.info(f"Model uploaded successfully to gs://{bucket_name}/model.pkl")
+        logging.info(f"Model uploaded successfully to 'gs://{bucket_name}/model.pkl'.")
     except Exception as e:
-        raise RuntimeError(f"Error uploading model to bucket {bucket_name}: {e}")
+        raise RuntimeError(f"Failed to upload model to bucket '{bucket_name}': {str(e)}")
+
 
 def deploy_flask_api_on_cloud_run(**context):
     """Deploy a Flask API to Cloud Run."""
