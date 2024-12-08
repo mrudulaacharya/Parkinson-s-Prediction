@@ -675,21 +675,6 @@ def select_best_model(**context):
             raise
 
 def test_best_model(**context):
-<<<<<<< HEAD
-    # Pull the best model from XCom
-    best_model = context['ti'].xcom_pull(key="best_model",task_ids='select_best_model')
-    model=joblib.load(best_model)
-
-    X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
-    y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
-
-    # Evaluate test accuracy and classification report
-    test_accuracy, report_text = evaluate_on_test_set(model, X_test, y_test)
-
-    print(f"Test Accuracy for best model: {test_accuracy}")
-    print(f"Classification Report:\n{report_text}")
-    return test_accuracy, report_text
-=======
     # Pull the best model path from XCom
     try:
         logging.info("Test best model")
@@ -718,7 +703,6 @@ def test_best_model(**context):
     except Exception as e:
             logging.error("Error loading demographics data: %s", e)
             raise
->>>>>>> a6bbe28e990a8f3bb1b3b74e3ac32a3b19b68e5f
 
 def register_best_model(**context):
     # Set tracking URI and experiment
@@ -877,6 +861,7 @@ prepare_image_folder_task = BashOperator(
     dag=dag,
 )
 
+
 build_docker_image_task = BashOperator(
     task_id='build_docker_image',
     bash_command = """
@@ -893,38 +878,6 @@ build_docker_image_task = BashOperator(
     },
 )
 
-# push_image_to_artifact_registry_task = BashOperator(
-#     task_id='push_image_to_artifact_registry',
-#     bash_command="""
-#     # Authenticate the service account
-#     gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
-    
-#     # Set the GCP project
-#     gcloud config set project ${GCP_PROJECT_ID} &&
-    
-#     # Create Artifact Registry repository (skip if it already exists)
-#     gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
-#         --repository-format=docker \
-#         --location=${GCP_REGION} \
-#         --description="Docker repository" \
-#         --project=${GCP_PROJECT_ID} \
-#         --quiet || true &&
-
-#     # Configure Docker to use gcloud as a credential helper
-#     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
-
-#     # Push the Docker image to Artifact Registry
-#     docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
-#     """,
-#     dag=dag,
-#     env={
-#         'GCP_PROJECT_ID': GCP_PROJECT_ID,     # Ensure this is defined in your DAG
-#         'GCP_REGION': GCP_REGION,             # Ensure this is defined in your DAG
-#         'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,  # Replace with the image name
-#         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,  # Replace with the repository name
-#     },
-# )
-
 push_image_to_artifact_registry_task = BashOperator(
     task_id='push_image_to_artifact_registry',
     bash_command="""
@@ -934,34 +887,66 @@ push_image_to_artifact_registry_task = BashOperator(
     # Set the GCP project
     gcloud config set project ${GCP_PROJECT_ID} &&
     
-    # Check if the Artifact Registry repository exists
-    if gcloud artifacts repositories list --location=${GCP_REGION} \
-       --filter="name:${GCP_ARTIFACT_REPO}" --format="value(name)" | grep -q ${GCP_ARTIFACT_REPO}; then
-        echo "Artifact Registry repository ${GCP_ARTIFACT_REPO} already exists."
-    else
-        echo "Creating Artifact Registry repository ${GCP_ARTIFACT_REPO}..."
-        gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
-            --repository-format=docker \
-            --location=${GCP_REGION} \
-            --description="Docker repository" \
-            --project=${GCP_PROJECT_ID} \
-            --quiet
-    fi &&
-    
+    # Create Artifact Registry repository (skip if it already exists)
+    gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
+        --repository-format=docker \
+        --location=${GCP_REGION} \
+        --description="Docker repository" \
+        --project=${GCP_PROJECT_ID} \
+        --quiet || true &&
+
     # Configure Docker to use gcloud as a credential helper
     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
-    
+
     # Push the Docker image to Artifact Registry
     docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
     """,
     dag=dag,
     env={
-        'GCP_PROJECT_ID': GCP_PROJECT_ID,        # Ensure this is defined in your DAG
-        'GCP_REGION': GCP_REGION,               # Ensure this is defined in your DAG
-        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME, # Replace with the image name
-        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO, # Replace with the repository name
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,     # Ensure this is defined in your DAG
+        'GCP_REGION': GCP_REGION,             # Ensure this is defined in your DAG
+        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,  # Replace with the image name
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,  # Replace with the repository name
     },
 )
+
+# push_image_to_artifact_registry_task = BashOperator(
+#     task_id='push_image_to_artifact_registry',
+#     bash_command="""
+#     # Authenticate the service account
+#     gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
+    
+#     # Set the GCP project
+#     gcloud config set project ${GCP_PROJECT_ID} &&
+    
+#     # Check if the Artifact Registry repository exists
+#     if gcloud artifacts repositories list --location=${GCP_REGION} \
+#        --filter="name:${GCP_ARTIFACT_REPO}" --format="value(name)" | grep -q ${GCP_ARTIFACT_REPO}; then
+#         echo "Artifact Registry repository ${GCP_ARTIFACT_REPO} already exists."
+#     else
+#         echo "Creating Artifact Registry repository ${GCP_ARTIFACT_REPO}..."
+#         gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
+#             --repository-format=docker \
+#             --location=${GCP_REGION} \
+#             --description="Docker repository" \
+#             --project=${GCP_PROJECT_ID} \
+#             --quiet
+#     fi &&
+    
+#     # Configure Docker to use gcloud as a credential helper
+#     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
+    
+#     # Push the Docker image to Artifact Registry
+#     docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
+#     """,
+#     dag=dag,
+#     env={
+#         'GCP_PROJECT_ID': GCP_PROJECT_ID,        # Ensure this is defined in your DAG
+#         'GCP_REGION': GCP_REGION,               # Ensure this is defined in your DAG
+#         'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME, # Replace with the image name
+#         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO, # Replace with the repository name
+#     },
+# )
 
 
 deploy_to_gke_task = BashOperator(

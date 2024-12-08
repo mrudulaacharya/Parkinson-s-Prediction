@@ -40,17 +40,11 @@ dag = DAG(
 )
 
 # Define file paths
-<<<<<<< HEAD
-participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
-demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
-=======
 participant_status_path = '/opt/airflow/raw_data/Participant_Status_05Dec2024.csv'
 demographics_path = '/opt/airflow/raw_data/Demographics_05Dec2024.csv'
 biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
->>>>>>> a6bbe28e990a8f3bb1b3b74e3ac32a3b19b68e5f
 # Directory where CSV files are stored.
-csv_directory = '/opt/airflow/motor_assessments/'
+csv_directory = '/opt/airflow/motor_assessment/'
 
 
 
@@ -280,7 +274,7 @@ def load_motor_senses_1(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_I")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 1: {str(e)}")
         raise
@@ -289,7 +283,7 @@ def load_motor_senses_2(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_I_Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 2: {str(e)}")
         raise
@@ -297,7 +291,7 @@ def load_motor_senses_3(**context):
     try:
         logging.info("Loading motor senses data from MDS_UPDRS_Part_II__Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 3: {str(e)}")
         raise
@@ -306,7 +300,7 @@ def load_motor_senses_4(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_III")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 4: {str(e)}")
         raise
@@ -315,7 +309,7 @@ def load_motor_senses_5(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_IV__Motor_Complications")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_05Dec2024.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 5: {str(e)}")
         raise
