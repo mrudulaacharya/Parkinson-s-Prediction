@@ -22,6 +22,9 @@ services:
       - GCP_ZONE=us-central1-c
       - GKE_DEPLOYMENT_NAME=parkinson-model
       - GCP_ARTIFACT_REPO=model-registry-1
+      - BUCKET_NAME=parkinsons_prediction_logs_bucket
+      - DATA_BUCKET_NAME=parkinsons_prediction_data_bucket
+      - SERVICE_ACCOUNT_EMAIL=sa-371@driven-lore-443500-t9.iam.gserviceaccount.com
     volumes:
       # - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       # - ./logs:/opt/airflow/logs   # Optional: log persistence

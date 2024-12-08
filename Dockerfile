@@ -1,5 +1,3 @@
-
-
 # Use the official Apache Airflow image as a base
 FROM apache/airflow:2.7.2-python3.10
 
@@ -13,8 +11,7 @@ COPY requirements.txt /requirements.txt
 # Install Python dependencies as airflow user
 USER airflow
 RUN pip install --no-cache-dir -r /requirements.txt
-RUN pip install --no-cache-dir dvc[s3]  # Install DVC with optional S3 support
-
+RUN pip install --no-cache-dir dvc[all]  # Install DVC with optional S3 support
 
 # Switch to root to allow modification of directories
 USER root
@@ -35,7 +32,6 @@ RUN apt-get update && apt-get install -y google-cloud-sdk
 
 # Clean up unnecessary files to reduce image size
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-
 
 COPY ./sa-key.json /opt/airflow/sa-key.json
 ENV GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/sa-key.json
