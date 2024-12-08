@@ -18,6 +18,7 @@ from sklearn.pipeline import Pipeline
 import logging
 import joblib
 logging.basicConfig(level=logging.INFO)
+
 # Default arguments for the DAG.
 default_args = {
     'owner': 'airflow',
@@ -37,20 +38,16 @@ dag = DAG(
     schedule_interval=timedelta(days=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
+    is_paused_upon_creation=False,
 )
 
 # Define file paths
-<<<<<<< HEAD
-participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
-demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
-=======
-participant_status_path = '/opt/airflow/raw_data/Participant_Status_05Dec2024.csv'
-demographics_path = '/opt/airflow/raw_data/Demographics_05Dec2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
->>>>>>> a6bbe28e990a8f3bb1b3b74e3ac32a3b19b68e5f
+participant_status_path = '/opt/airflow/raw_data/Participant_Status.csv'
+demographics_path = '/opt/airflow/raw_data/Demographics.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results.csv'
+
 # Directory where CSV files are stored.
-csv_directory = '/opt/airflow/motor_assessments/'
+csv_directory = '/opt/airflow/motor_assessment/'
 
 
 
@@ -200,13 +197,13 @@ def filter_biospecimen_analysis(**context):
         
         bl_events = biospecimen_analysis[biospecimen_analysis['CLINICAL_EVENT'] == 'BL']
 
-        # Step 2: Convert 'RUNDATE' to datetime if it's not already in datetime format
-        bl_events['RUNDATE'] = pd.to_datetime(bl_events['RUNDATE'])  # Adjust format if necessary
+        # Convert 'RUNDATE' to datetime if it's not already in datetime format
+        bl_events['RUNDATE'] = pd.to_datetime(bl_events['RUNDATE'])
 
-        # Step 3: Sort the filtered DataFrame by PATNO and RUNDATE to ensure chronological order
+        # Sort the filtered DataFrame by PATNO and RUNDATE to ensure chronological order
         bl_events_sorted = bl_events.sort_values(by=['PATNO', 'RUNDATE'])
 
-        # Step 4: Drop duplicates based on 'PATNO', keeping the first (earliest) occurrence
+        # Drop duplicates based on 'PATNO', keeping the first (earliest) occurrence
         biospecimen_analysis_cleaned = bl_events_sorted.drop_duplicates(subset='PATNO', keep='first')
 
         context['ti'].xcom_push(key='filtered_biospecimen_analysis', value=biospecimen_analysis_cleaned)
@@ -239,6 +236,7 @@ def merge_biospecimen_with_participant(**context):
         
         biospecimen_analysis = context['ti'].xcom_pull(task_ids='task_clean_filtered_biospecimen_analysis', key='cleaned_filtered_biospecimen_analysis')
         combined_table = context['ti'].xcom_pull(task_ids='task_clean_participantstatus_demographic', key='cleaned_participantstatus_demographic')
+        
         if biospecimen_analysis is None:
             raise ValueError("biospecimen_analysis is None. Check the task 'task_clean_filtered_biospecimen_analysis'.")
         if combined_table is None:
@@ -266,7 +264,7 @@ def clean_participantstatus_demographics_biospecimen_analysis(**context):
         merged_data = context['ti'].xcom_pull(task_ids='task_merge_participantstatus_demographics_biospecimen_analysis', key='merged_data')
         merged_data.drop(columns=['PATNO'], inplace=True)
         context['ti'].xcom_push(key='merged_data_cleaned', value=merged_data)
-        #merged_data.to_csv('/home/mrudula/MLPOPS/outputs/patient_demographics_biospecimen.csv', index=False)
+
         logging.info("Cleaned merged participant and biospecimen data")      
         return merged_data
 
@@ -280,7 +278,7 @@ def load_motor_senses_1(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_I")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 1: {str(e)}")
         raise
@@ -289,7 +287,7 @@ def load_motor_senses_2(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_I_Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_I_Patient_Questionnaire.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 2: {str(e)}")
         raise
@@ -297,7 +295,7 @@ def load_motor_senses_3(**context):
     try:
         logging.info("Loading motor senses data from MDS_UPDRS_Part_II__Patient_Questionnaire")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS_UPDRS_Part_II__Patient_Questionnaire.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 3: {str(e)}")
         raise
@@ -306,7 +304,7 @@ def load_motor_senses_4(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_III")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_III.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 4: {str(e)}")
         raise
@@ -315,22 +313,20 @@ def load_motor_senses_5(**context):
     try:
         logging.info("Loading motor senses data from MDS-UPDRS_Part_IV__Motor_Complications")
 
-        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications_27Oct2024.csv'))
+        return pd.read_csv(os.path.join(csv_directory, 'MDS-UPDRS_Part_IV__Motor_Complications.csv'))
     except Exception as e:
         logging.error(f"Error loading motor senses data for Part 5: {str(e)}")
         raise
-# Clean functions for each loaded CSV
+
+# Data cleaning functions for each loaded CSV
 def clean_motor_senses_1(**context):
-    # Pull the DataFrame from XCom, making sure it's a DataFrame
     try:
 
         logging.info("Starting clean_motor_senses_1 task")
         df = context['ti'].xcom_pull(task_ids='load_motor_senses_1_task')
 
         if isinstance(df, str):
-            # If df is a string, it’s likely being serialized; read it as DataFrame
             df = pd.read_json(df)
-    
     
         df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP1RTOT'],inplace=True)
 
@@ -338,7 +334,6 @@ def clean_motor_senses_1(**context):
     
         context['ti'].xcom_push(key='cleaned_1', value=df)
 
-        # Drop specified columns and return the cleaned DataFrame
         return df
     
     except Exception as e:
@@ -348,18 +343,14 @@ def clean_motor_senses_2(**context):
     try:
 
         logging.info("Starting clean_motor_senses_2 task")
-    # Pull the DataFrame from XCom, making sure it's a DataFrame
         df = context['ti'].xcom_pull(task_ids='load_motor_senses_2_task')
 
         if isinstance(df, str):
-            # If df is a string, it’s likely being serialized; read it as DataFrame
             df = pd.read_json(df)
         df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP1PTOT'],inplace=True)
         logging.info("Cleaned motor senses Part 2 data and pushed to XCom")
         
-        #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP1PTOT'],inplace=True)
         context['ti'].xcom_push(key='cleaned_2', value=df)
-        # Drop specified columns and return the cleaned DataFrame
         return df
     except Exception as e:
             logging.error(f"Error in clean_motor_senses_2: {str(e)}")
@@ -370,17 +361,12 @@ def clean_motor_senses_3(**context):
     try:
 
         logging.info("Starting clean_motor_senses_3 task")
-        # Pull the DataFrame from XCom, making sure it's a DataFrame
         df = context['ti'].xcom_pull(task_ids='load_motor_senses_3_task')
 
         if isinstance(df, str):
-            # If df is a string, it’s likely being serialized; read it as DataFrame
             df = pd.read_json(df)
 
-        # Drop specified columns and return the cleaned DataFrame
-
         df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP2PTOT'],inplace=True)
-        #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP2PTOT'],inplace=True)
         logging.info("Cleaned motor senses Part 3 data and pushed to XCom")
         
         context['ti'].xcom_push(key='cleaned_3', value=df)
@@ -393,19 +379,15 @@ def clean_motor_senses_4(**context):
     try:
 
         logging.info("Starting clean_motor_senses_4 task")
-    # Pull the DataFrame from XCom, making sure it's a DataFrame
         df = context['ti'].xcom_pull(task_ids='load_motor_senses_4_task')
 
         if isinstance(df, str):
-            # If df is a string, it’s likely being serialized; read it as DataFrame
             df = pd.read_json(df)
         df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'],inplace=True)
-        #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','PDTRTMNT','PDSTATE','HRPOSTMED','HRDBSON','HRDBSOFF','PDMEDYN','DBSYN','ONOFFORDER','OFFEXAM','OFFNORSN','DBSOFFTM','ONEXAM','ONNORSN','DBSONTM','PDMEDDT','PDMEDTM','EXAMDT','EXAMTM','NP3TOT'],inplace=True)
 
         logging.info("Cleaned motor senses Part 4 data and pushed to XCom")
         
         context['ti'].xcom_push(key='cleaned_4', value=df)
-        # Drop specified columns and return the cleaned DataFrame
         return df
     except Exception as e:
             logging.error(f"Error in clean_motor_senses_4: {str(e)}")
@@ -415,22 +397,21 @@ def clean_motor_senses_5(**context):
     try:
 
         logging.info("Starting clean_motor_senses_5 task")
-    # Pull the DataFrame from XCom, making sure it's a DataFrame
         df = context['ti'].xcom_pull(task_ids='load_motor_senses_5_task')
 
         if isinstance(df, str):
-            # If df is a string, it’s likely being serialized; read it as DataFrame
             df = pd.read_json(df)
-        #df.drop(columns=['REC_ID','PAG_NAME','INFODT','ORIG_ENTRY','LAST_UPDATE','NP4TOT'],inplace=True)
+
         df.drop(columns=['REC_ID','PAG_NAME','INFODT','LAST_UPDATE','NP4TOT'],inplace=True)
         logging.info("Cleaned motor senses Part 5 data and pushed to XCom")
         
         context['ti'].xcom_push(key='cleaned_5', value=df)
-        # Drop specified columns and return the cleaned DataFrame
+
         return df
     except Exception as e:
             logging.error(f"Error in clean_motor_senses_5: {str(e)}")
             raise
+
 # Function to merge all cleaned CSVs
 def filter_all_motor_senses_csvs(**context):
     # Pull cleaned DataFrames from XCom
@@ -445,7 +426,6 @@ def filter_all_motor_senses_csvs(**context):
             context['ti'].xcom_pull(key='cleaned_4',task_ids='clean_motor_senses_4_task'),
             context['ti'].xcom_pull(key='cleaned_5',task_ids='clean_motor_senses_5_task')
         ]
-        #filtered_dfs = [df[df['EVENT_ID'].isin(['BL', 'PW', 'SC', 'ST'])] for df in cleaned_dfs]
         
         # Define a function to clean each DataFrame
         def clean_df(df):

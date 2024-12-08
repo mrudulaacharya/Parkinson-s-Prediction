@@ -60,5 +60,5 @@ airflow scheduler &
 sleep 60
 # Start the webserver in the foreground (so Docker keeps the container running)
 exec airflow webserver
-
+sleep 60
 airflow dags trigger data_pipeline

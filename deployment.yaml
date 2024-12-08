@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: model-container
-        image: us-central1-docker.pkg.dev/driven-lore-443500-t9/model-registry-2/model-predict:latest
+        image: us-central1-docker.pkg.dev/driven-lore-443500-t9/test-model-registry/model-predict:latest
         command:  ["python", "app.py"]
         ports:
         - containerPort: 8080

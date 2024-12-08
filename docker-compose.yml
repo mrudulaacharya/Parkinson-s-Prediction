@@ -21,7 +21,7 @@ services:
       - GKE_CLUSTER_NAME=model-cluster
       - GCP_ZONE=us-central1-c
       - GKE_DEPLOYMENT_NAME=parkinson-model
-      - GCP_ARTIFACT_REPO=model-registry-1
+      - GCP_ARTIFACT_REPO=test-model-registry
       - BUCKET_NAME=parkinsons_prediction_logs_bucket
       - DATA_BUCKET_NAME=parkinsons_prediction_data_bucket
       - SERVICE_ACCOUNT_EMAIL=sa-371@driven-lore-443500-t9.iam.gserviceaccount.com
@@ -29,17 +29,16 @@ services:
     volumes:
       # - ./dags:/opt/airflow/dags   # Mount DAGs for easy updating
       # - ./logs:/opt/airflow/logs   # Optional: log persistence
-      # - ./raw_data1:/opt/airflow/raw_data1       # Mount 'raw_data' folder
-      # - ./motor_assessment:/opt/airflow/motor_assessment  # Mount 'motor_assessments' folder
+      # - ./raw_data:/opt/airflow/raw_data       # Mount 'raw_data' folder
+      # - ./motor_assessments:/opt/airflow/motor_assessments  # Mount 'motor_assessments' folder
       # - ./outputs:/opt/airflow/outputs # Mount 'output' folder
       # - ./models:/opt/airflow/models
       # - ./mlruns:/opt/airflow/mlruns # Mount mlruns folder for MLflow tracking
       - ./.dvc:/opt/airflow/.dvc          # Mount DVC metadata folder
       - ./.git:/opt/airflow/.git 
       - ./sa-key.json:/opt/airflow/sa-key.json
-      - ./gcp_image:/opt/airflow/gcp_image
       - /var/run/docker.sock:/var/run/docker.sock
-      - /Users/shalakapadalkar/.docker/config.json:/root/.docker/config.json
+      - ./config.json:/root/.docker/config.json
       - ./deployment.yaml:/opt/airflow/deployment.yaml
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]

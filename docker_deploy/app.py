@@ -7,45 +7,14 @@ import os
 # Load preprocessing objects
 with open('preprocessor.pkl', 'rb') as file:
     preprocessor = joblib.load(file)
-# imputer = joblib.load('imputer.pkl')
-# onehot_encoders = joblib.load('onehot_encoders.pkl')
 
 # Load model
-with open('best_svm_model.pkl', 'rb') as file:
+with open('model.pkl', 'rb') as file:
     model = joblib.load(file)
 
 app = Flask(__name__)
 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
-# def preprocess_new_data(new_example, scaler, imputer, onehot_encoders):
-#     # Convert to DataFrame
-#     new_df = pd.DataFrame([new_example])
-    
-#     # Impute missing values using fitted imputer
-#     new_df_imputed = pd.DataFrame(
-#         imputer.transform(new_df), 
-#         columns=new_df.columns
-#     )
-    
-#     # One-hot encode categorical columns
-#     for col, encoder in onehot_encoders.items():
-#         # Use transform with handle_unknown='ignore'
-#         encoded_cols = encoder.transform(new_df_imputed[[col]])
-#         encoded_df = pd.DataFrame(
-#             encoded_cols, 
-#             columns=encoder.get_feature_names_out([col])
-#         )
-#         new_df_imputed = pd.concat([
-#             new_df_imputed.drop(columns=[col]), 
-#             encoded_df
-#         ], axis=1)
-    
-#     # Scale numerical columns
-#     numerical_cols = new_df_imputed.select_dtypes(include=['int64', 'float64']).columns
-#     new_df_imputed[numerical_cols] = scaler.transform(new_df_imputed[numerical_cols])
-    
-#    return new_df_imputed
 
 @app.route('/')
 def home():
@@ -83,4 +52,3 @@ def predict():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    #app.run(host='0.0.0.0', port=8080)

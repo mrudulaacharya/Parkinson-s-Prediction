@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO)
 
 folder_path = '/opt/airflow/models'
 
-# Set GCP Environment Variables (ensure these are set in docker-compose.yml or passed securely)
+# Set GCP Environment Variables
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 GCP_REGION = os.getenv("GCP_REGION")
 DOCKER_IMAGE_NAME = os.getenv("DOCKER_IMAGE_NAME")
@@ -45,6 +45,8 @@ GCP_ZONE = os.getenv("GCP_ZONE")
 GKE_DEPLOYMENT_NAME = os.getenv("GKE_DEPLOYMENT_NAME")
 GCP_ARTIFACT_REPO = os.getenv("GCP_ARTIFACT_REPO")
 DEPLOYMENT_FILE = os.getenv("DEPLOYMENT_FILE")
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+DATA_BUCKET_NAME = os.getenv("DATA_BUCKET_NAME")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -67,6 +69,7 @@ dag = DAG(
     schedule_interval=timedelta(days=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
+    is_paused_upon_creation=False,
 )
 
 # Custom email alert function.
@@ -675,21 +678,6 @@ def select_best_model(**context):
             raise
 
 def test_best_model(**context):
-<<<<<<< HEAD
-    # Pull the best model from XCom
-    best_model = context['ti'].xcom_pull(key="best_model",task_ids='select_best_model')
-    model=joblib.load(best_model)
-
-    X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
-    y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
-
-    # Evaluate test accuracy and classification report
-    test_accuracy, report_text = evaluate_on_test_set(model, X_test, y_test)
-
-    print(f"Test Accuracy for best model: {test_accuracy}")
-    print(f"Classification Report:\n{report_text}")
-    return test_accuracy, report_text
-=======
     # Pull the best model path from XCom
     try:
         logging.info("Test best model")
@@ -718,7 +706,6 @@ def test_best_model(**context):
     except Exception as e:
             logging.error("Error loading demographics data: %s", e)
             raise
->>>>>>> a6bbe28e990a8f3bb1b3b74e3ac32a3b19b68e5f
 
 def register_best_model(**context):
     # Set tracking URI and experiment
@@ -871,8 +858,8 @@ task_send_alert_email = PythonOperator(
 prepare_image_folder_task = BashOperator(
     task_id='prepare_image_folder',
     bash_command="""
-    mkdir -p /opt/airflow/gcp_image && \
-    cp {{ ti.xcom_pull(task_ids='select_best_model', key='best_model') }} /opt/airflow/gcp_image/model.pkl
+    cp /opt/airflow/models/preprocessor.pkl /opt/airflow/docker_deploy/preprocessor.pkl && \
+    cp {{ ti.xcom_pull(task_ids='select_best_model', key='best_model') }} /opt/airflow/docker_deploy/model.pkl
     """,
     dag=dag,
 )
@@ -883,7 +870,7 @@ build_docker_image_task = BashOperator(
     export DOCKER_HOST=unix:///var/run/docker.sock &&
     docker build \
     -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest \
-    /opt/airflow/gcp_image""",
+    /opt/airflow/docker_deploy""",
     dag=dag,
     env={
         'GCP_REGION': GCP_REGION,
@@ -893,41 +880,11 @@ build_docker_image_task = BashOperator(
     },
 )
 
-# push_image_to_artifact_registry_task = BashOperator(
-#     task_id='push_image_to_artifact_registry',
-#     bash_command="""
-#     # Authenticate the service account
-#     gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
-    
-#     # Set the GCP project
-#     gcloud config set project ${GCP_PROJECT_ID} &&
-    
-#     # Create Artifact Registry repository (skip if it already exists)
-#     gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
-#         --repository-format=docker \
-#         --location=${GCP_REGION} \
-#         --description="Docker repository" \
-#         --project=${GCP_PROJECT_ID} \
-#         --quiet || true &&
-
-#     # Configure Docker to use gcloud as a credential helper
-#     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
-
-#     # Push the Docker image to Artifact Registry
-#     docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
-#     """,
-#     dag=dag,
-#     env={
-#         'GCP_PROJECT_ID': GCP_PROJECT_ID,     # Ensure this is defined in your DAG
-#         'GCP_REGION': GCP_REGION,             # Ensure this is defined in your DAG
-#         'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,  # Replace with the image name
-#         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,  # Replace with the repository name
-#     },
-# )
-
 push_image_to_artifact_registry_task = BashOperator(
     task_id='push_image_to_artifact_registry',
     bash_command="""
+    set -e
+
     # Authenticate the service account
     gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
     
@@ -951,7 +908,9 @@ push_image_to_artifact_registry_task = BashOperator(
     # Configure Docker to use gcloud as a credential helper
     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
     
-    # Push the Docker image to Artifact Registry
+    docker tag ${DOCKER_IMAGE_NAME}:latest ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest &&
+    
+    # Push the 'latest' image, overwriting if it already exists
     docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
     """,
     dag=dag,
@@ -967,9 +926,20 @@ push_image_to_artifact_registry_task = BashOperator(
 deploy_to_gke_task = BashOperator(
     task_id='deploy_to_gke',
     bash_command="""
-    # 1. Create the GKE Cluster
-    echo "Creating GKE cluster: $GKE_CLUSTER_NAME"
-    gcloud container clusters create-auto ${GKE_CLUSTER_NAME} --zone=${GCP_ZONE} --project=${GCP_PROJECT_ID}
+    # Check if the cluster exists
+    CLUSTER_EXISTENCE=$(gcloud container clusters list \
+        --filter="name=${GKE_CLUSTER_NAME} AND zone:${GCP_ZONE}" \
+        --project=${GCP_PROJECT_ID} \
+        --format="value(name)")
+
+    if [[ -z "$CLUSTER_EXISTENCE" ]]; then
+        echo "Cluster ${GKE_CLUSTER_NAME} does not exist in zone ${GCP_ZONE}. Creating a new cluster..."
+        gcloud container clusters create-auto ${GKE_CLUSTER_NAME} \
+            --zone=${GCP_ZONE} \
+            --project=${GCP_PROJECT_ID}
+    else
+        echo "Cluster ${GKE_CLUSTER_NAME} already exists in zone ${GCP_ZONE}. Using the existing cluster..."
+    fi
 
     # 2. Obtain authentication credentials for kubectl
     echo "Fetching GKE credentials for cluster: $GKE_CLUSTER_NAME"
@@ -993,7 +963,7 @@ deploy_to_gke_task = BashOperator(
 
     # 6. Expose the deployment with a LoadBalancer
     echo "Exposing deployment as a LoadBalancer"
-    kubectl expose deployment model-deployment --type=LoadBalancer --port=80 --target-port=8080
+    kubectl expose deployment ${GKE_DEPLOYMENT_NAME} --type=LoadBalancer --port=80 --target-port=8080
 
     # 7. Fetch the external IP of the LoadBalancer
     echo "Fetching external IP of the LoadBalancer"
@@ -1021,51 +991,30 @@ deploy_to_gke_task = BashOperator(
     },
 )
 
-test_inference_task = BashOperator(
-    task_id='test_inference',
-    bash_command="""
-    # Wait for the external IP to be assigned
-    external_ip=""
-    while [ -z "$external_ip" ]; do
-      echo "Waiting for end point..."
-      external_ip=$(kubectl get svc ${GKE_DEPLOYMENT_NAME} --output=jsonpath='{.status.loadBalancer.ingress[0].ip}')
-      [ -z "$external_ip" ] && sleep 10
-    done
-    echo "Endpoint ready: $external_ip"
-
-    # Test inference
-    curl http://$external_ip/predict
-    """,
-    dag=dag,
-
-    env={
-        'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
-    },
-)
 sync_logs = BashOperator(
         task_id='sync_logs',
-        bash_command='gsutil -m rsync -r -x ".*scheduler/latest" /opt/airflow/logs gs://parkinsons_prediction_data_bucket/logs',
+        bash_command='gsutil -m rsync -r -x ".*scheduler/latest" /opt/airflow/logs gs://${BUCKET_NAME}/logs',
         trigger_rule='all_done'
     )
     
 sync_outputs = BashOperator(
         task_id='sync_outputs',
-        bash_command='gsutil -m  rsync -r /opt/airflow/outputs gs://parkinsons_prediction_data_bucket/outputs',
+        bash_command='gsutil -m  rsync -r /opt/airflow/outputs gs://${BUCKET_NAME}/outputs',
         trigger_rule='all_done'
     )
     
 sync_mlrun = BashOperator(
         task_id='sync_mlrun',
-        bash_command='gsutil -m  rsync -r /opt/airflow/mlruns gs://parkinsons_prediction_data_bucket/mlruns',
+        bash_command='gsutil -m  rsync -r /opt/airflow/mlruns gs://${BUCKET_NAME}/mlruns',
         trigger_rule='all_done'
     )
 sync_models= BashOperator(
         task_id='sync_models',
-        bash_command='gsutil -m  rsync -r /opt/airflow/models gs://parkinsons_prediction_data_bucket/models',
+        bash_command='gsutil -m  rsync -r /opt/airflow/models gs://${BUCKET_NAME}/models',
         trigger_rule='all_done'
     )
 
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>prepare_image_folder_task >> build_docker_image_task >> push_image_to_artifact_registry_task >> deploy_to_gke_task >> test_inference_task >>sync_models>>sync_logs >> sync_outputs >> sync_mlrun>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>prepare_image_folder_task >> build_docker_image_task >> push_image_to_artifact_registry_task >> deploy_to_gke_task >>sync_models>>sync_logs >> sync_outputs >> sync_mlrun>>task_send_alert_email

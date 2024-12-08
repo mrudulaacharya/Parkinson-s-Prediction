@@ -4,14 +4,10 @@ FROM python:3.10-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the application files to the container
+# Copy all application files into the container
 COPY . /app
 
-COPY templates /app/templates
-# Copy the model file into the container
-COPY best_lr_model.pkl /app/best_lr_model.pkl
-
-# Install build-essential and other tools for compiling certain Python packages
+# Install essential system dependencies for Python
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libssl-dev \
@@ -19,13 +15,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Set the PORT environment variable
-ENV PORT=8080
+# Install Google Cloud SDK (for debugging, optional)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - \
+    && apt-get update && apt-get install -y google-cloud-sdk \
+    && rm -rf /var/lib/apt/lists/*
 
 # Expose the Flask app's port
 EXPOSE 8080
 
-CMD ["python", "-c", "import os; from app import app; app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))"]
+# Start the Flask server
+CMD ["python", "app.py"]

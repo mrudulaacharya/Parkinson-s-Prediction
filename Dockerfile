@@ -6,6 +6,8 @@ WORKDIR /opt/airflow
 
 # Copy DAGs and requirements file
 COPY dags/ /opt/airflow/dags/
+COPY docker_deploy/ /opt/airflow/docker_deploy
+COPY config.json /opt/airflow/config.json
 COPY requirements.txt /requirements.txt
 
 # Install Python dependencies as airflow user
@@ -15,6 +17,16 @@ RUN pip install --no-cache-dir dvc[all]  # Install DVC with optional S3 support
 
 # Switch to root to allow modification of directories
 USER root
+
+# Set permissions for docker_deploy directory
+RUN mkdir -p /opt/airflow/docker_deploy && \
+    chmod -R 775 /opt/airflow/docker_deploy && \
+    chown -R airflow:airflow /opt/airflow/docker_deploy
+
+# Set permissions for the service account key file
+RUN chmod 400 /opt/airflow/sa-key.json && \
+    chown airflow:airflow /opt/airflow/sa-key.json
+
 
 RUN apt-get update && apt-get install -y \
     curl apt-transport-https ca-certificates gnupg
@@ -27,8 +39,10 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
     gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
 
-# Update package list and install Google Cloud SDK
-RUN apt-get update && apt-get install -y google-cloud-sdk
+# Update package list and install Google Cloud SDK along with gke-gcloud-auth-plugin
+RUN apt-get update && apt-get install -y \
+    google-cloud-sdk \
+    google-cloud-sdk-gke-gcloud-auth-plugin
 
 # Clean up unnecessary files to reduce image size
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -56,8 +70,8 @@ RUN apt-get update && apt-get install -y \
 # Install kubectl
 RUN apt-get update && apt-get install -y curl && \
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    chmod +x kubectl && \
-    mv kubectl /usr/local/bin/
+    chmod +x kubectl && mv kubectl /usr/local/bin/
+
 
 # Ensure entrypoint.sh is executable
 COPY entrypoint.sh /opt/airflow/entrypoint.sh
