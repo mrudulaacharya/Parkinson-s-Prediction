@@ -40,9 +40,15 @@ dag = DAG(
 )
 
 # Define file paths
+<<<<<<< HEAD
 participant_status_path = '/opt/airflow/raw_data/Participant_Status_27Oct2024.csv'
 demographics_path = '/opt/airflow/raw_data/Demographics_27Oct2024.csv'
 biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_27Oct2024.csv'
+=======
+participant_status_path = '/opt/airflow/raw_data/Participant_Status_05Dec2024.csv'
+demographics_path = '/opt/airflow/raw_data/Demographics_05Dec2024.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
+>>>>>>> a6bbe28e990a8f3bb1b3b74e3ac32a3b19b68e5f
 # Directory where CSV files are stored.
 csv_directory = '/opt/airflow/motor_assessments/'
 
@@ -1025,6 +1031,8 @@ concatenate_df_target_task=PythonOperator(
     dag=dag,
 
 )
+
+
 
  # Task to log data with DVC
 # dvc_log_task = BashOperator(

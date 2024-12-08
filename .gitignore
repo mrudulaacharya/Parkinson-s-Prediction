@@ -21,4 +21,5 @@ raw_data1/
 *.logiam-sa-key.json
 
 logs/
+key1.json
 sa-key.json

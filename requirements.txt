@@ -232,7 +232,11 @@ wcwidth==0.2.13
 Werkzeug==2.2.3
 wrapt==1.15.0
 WTForms==3.0.1
+<<<<<<< HEAD
+xgboost==2.1.2
+=======
 xgboost==1.7
+>>>>>>> e5b982d553037f902adbbdc0169b50c3dab2141b
 yarl==1.9.2
 zc.lockfile==3.0.post1
 zipp==3.17.0
