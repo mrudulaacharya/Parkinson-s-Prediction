@@ -19,3 +19,6 @@ raw_data1/
 # Ignore Docker-related artifacts
 *.tar
 *.logiam-sa-key.json
+
+logs/
+sa-key.json

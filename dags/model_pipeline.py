@@ -7,6 +7,7 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
+from airflow.operators.bash import BashOperator
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 import xgboost as xgb
 import mlflow
@@ -28,6 +29,7 @@ import json
 import logging
 import numpy as np
 import pandas as pd
+import requests
 
 
 folder_path = '/opt/airflow/models'
@@ -35,8 +37,11 @@ folder_path = '/opt/airflow/models'
 # Set GCP Environment Variables (ensure these are set in docker-compose.yml or passed securely)
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 GCP_REGION = os.getenv("GCP_REGION")
-CLOUD_RUN_SERVICE_NAME = os.getenv("CLOUD_RUN_SERVICE_NAME")
 DOCKER_IMAGE_NAME = os.getenv("DOCKER_IMAGE_NAME")
+GKE_CLUSTER_NAME = os.getenv("GKE_CLUSTER_NAME")
+GCP_ZONE = os.getenv("GCP_ZONE")
+GKE_DEPLOYMENT_NAME = os.getenv("GKE_DEPLOYMENT_NAME")
+GCP_ARTIFACT_REPO = os.getenv("GCP_ARTIFACT_REPO")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -50,7 +55,6 @@ default_args = {
         task_id=context['task_instance'].task_id,
         dag_id=context['task_instance'].dag_id,
         **context)
-
 }
 
 dag = DAG(
@@ -541,6 +545,7 @@ def select_best_model(**context):
     # Retrieve the ranked models from XCom
     model_ranking = context['ti'].xcom_pull(key='model_ranking', task_ids='model_ranking')
 
+    # Validate that the model ranking exists
     if not model_ranking or len(model_ranking) == 0:
         raise ValueError("Model ranking is empty or not found in XCom.")
 
@@ -563,18 +568,28 @@ def select_best_model(**context):
     return best_model_object
 
 def test_best_model(**context):
-    # Pull the best model from XCom
-    best_model = context['ti'].xcom_pull(key="best_model",task_ids='select_best_model')
-    model=joblib.load(best_model)
+    # Pull the best model path from XCom
+    best_model = context['ti'].xcom_pull(key="best_model_path", task_ids='select_best_model')
 
+    if not best_model:
+        raise ValueError("Best model path is None. Ensure 'select_best_model' task ran successfully and pushed the model path to XCom.")
+
+    logging.info(f"Best model path retrieved: {best_model}")
+    model = joblib.load(best_model)  # Load the model
+
+    # Retrieve test data
     X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
     y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
 
-    # Evaluate test accuracy and classification report
+    if X_test is None or y_test is None:
+        raise ValueError("Test data (X_test or y_test) not found in XCom.")
+
+    # Evaluate the model
     test_accuracy, report_text = evaluate_on_test_set(model, X_test, y_test)
 
-    print(f"Test Accuracy for best model: {test_accuracy}")
-    print(f"Classification Report:\n{report_text}")
+    logging.info(f"Test Accuracy for the best model: {test_accuracy}")
+    logging.info(f"Classification Report:\n{report_text}")
+
     return test_accuracy, report_text
 
 def register_best_model(**context):
@@ -597,164 +612,6 @@ def register_best_model(**context):
         mlflow.register_model(model_uri, best_model_name)
         
     print(f"Registered {best_model_name} as the best model.")
-
-def create_bucket_with_best_model_name(**context):
-    """Create a GCP bucket dynamically using the best model's name."""
-    from google.cloud import storage
-
-    # Initialize the Google Cloud Storage client
-    client = storage.Client()
-    
-    # Retrieve the best model name from XCom
-    best_model_name = context['ti'].xcom_pull(key='best_model_name', task_ids='select_best_model')
-    if not best_model_name:
-        raise ValueError("Best model name not found in XCom.")
-
-    # Generate a unique bucket name using the model's name
-    bucket_name = f"{best_model_name.lower().replace(' ', '_')}_bucket"
-    print(f"Generated bucket name: {bucket_name}")
-
-    # Attempt to create the bucket
-    try:
-        bucket = client.bucket(bucket_name)
-        if bucket.exists():
-            logging.info(f"Bucket '{bucket_name}' already exists.")
-        else:
-            # Use the create_bucket method with required parameters
-            client.create_bucket(bucket_name, location=GCP_REGION)
-            logging.info(f"Bucket '{bucket_name}' created successfully in region '{GCP_REGION}'.")
-    except Exception as e:
-        raise RuntimeError(f"Failed to create bucket '{bucket_name}': {str(e)}")
-
-    # Push the bucket name to XCom for later use
-    context['ti'].xcom_push(key='bucket_name', value=bucket_name)
-
-   
-
-def push_model_to_gcs_bucket(**context):
-    """Upload the selected best model to the dynamically created GCP bucket."""
-
-    from google.cloud import storage
-
-    # Initialize the Google Cloud Storage client
-    client = storage.Client()
-
-    # Retrieve the bucket name and best model path from XCom
-    bucket_name = context['ti'].xcom_pull(key='bucket_name', task_ids='create_bucket_with_best_model_name')
-    best_model_path = context['ti'].xcom_pull(key='best_model_path', task_ids='select_best_model')
-
-    if not bucket_name:
-        raise ValueError("Bucket name not found in XCom. Ensure 'create_bucket_with_best_model_name' task ran successfully.")
-    if not best_model_path:
-        raise ValueError("Best model path not found in XCom. Ensure 'select_best_model' task provided the model path.")
-
-    # Attempt to upload the model file
-    try:
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob('model.pkl')  # Save the model as 'model.pkl'
-        blob.upload_from_filename(best_model_path)
-        logging.info(f"Model uploaded successfully to 'gs://{bucket_name}/model.pkl'.")
-    except Exception as e:
-        raise RuntimeError(f"Failed to upload model to bucket '{bucket_name}': {str(e)}")
-
-
-def deploy_flask_api_on_cloud_run(**context):
-    """Deploy a Flask API to Cloud Run."""
-    bucket_name = context['ti'].xcom_pull(key='bucket_name', task_ids='create_bucket_with_best_model_name')
-    if not bucket_name:
-        raise ValueError("Bucket name not found in XCom.")
-
-    # Define Cloud Run deployment parameters
-    service_name = CLOUD_RUN_SERVICE_NAME
-    region = GCP_REGION
-    image_uri = f"gcr.io/{GCP_PROJECT_ID}/{DOCKER_IMAGE_NAME}:latest"
-
-    # Deploy Cloud Run service using gcloud CLI
-    try:
-        deployment_command = (
-            f"gcloud run deploy {service_name} "
-            f"--image {image_uri} "
-            f"--region {region} "
-            f"--platform managed "
-            f"--allow-unauthenticated "
-            f"--set-env-vars BUCKET_NAME={bucket_name}"
-        )
-        logging.info(f"Deploying Flask API with command: {deployment_command}")
-        os.system(deployment_command)
-        logging.info(f"Flask API deployed successfully as {service_name}.")
-    except Exception as e:
-        raise RuntimeError(f"Error deploying Flask API to Cloud Run: {e}")
-
-def load_model_from_gcs(**context):
-    """Task to load the model from Google Cloud Storage."""
-    global model, model_type
-    bucket_name = os.getenv("BUCKET_NAME")
-    if not bucket_name:
-        raise ValueError("Environment variable 'BUCKET_NAME' is not set.")
-
-    file_name = "model.pkl"  # Path to the model file in the bucket
-    print(f"Loading model from GCS bucket: {bucket_name}, file: {file_name}")
-
-    # Initialize Google Cloud Storage client
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(file_name)
-
-    # Load the model
-    with blob.open("rb") as f:
-        loaded_model = pickle.load(f)
-
-    # Detect model type
-    if hasattr(loaded_model, "predict") and hasattr(loaded_model, "fit"):
-        if "xgboost" in str(type(loaded_model)).lower():
-            model_type = "xgboost"
-        elif "svm" in str(type(loaded_model)).lower():
-            model_type = "svm"
-        elif "randomforest" in str(type(loaded_model)).lower():
-            model_type = "rf"
-        elif "logisticregression" in str(type(loaded_model)).lower():
-            model_type = "logreg"
-        else:
-            model_type = "sklearn"
-        context['ti'].xcom_push(key='model', value=loaded_model)
-        context['ti'].xcom_push(key='model_type', value=model_type)
-    else:
-        raise ValueError(f"Unsupported model type: {type(loaded_model)}")
-    print(f"Model loaded successfully. Type: {model_type}")
-
-def predict_with_loaded_model(**context):
-    """Task to perform predictions using the loaded model."""
-    # Retrieve the model and model type from XCom
-    model = context['ti'].xcom_pull(key='model', task_ids='load_model_from_gcs')
-    model_type = context['ti'].xcom_pull(key='model_type', task_ids='load_model_from_gcs')
-
-    # Input data to predict
-    input_data = context['dag_run'].conf.get("input_data")  # Expecting input data from DagRun configuration
-    if not input_data:
-        raise ValueError("Input data not provided in DAG configuration.")
-
-    # Validate input shape
-    if not isinstance(input_data, list) or not all(isinstance(row, list) for row in input_data):
-        raise ValueError("Input data must be a 2D list.")
-
-    # Convert input to NumPy array
-    input_array = np.array(input_data)
-
-    # Perform predictions
-    if model_type in ["xgboost", "rf", "logreg", "svm"]:
-        predictions = model.predict(input_array)
-
-        # Include probabilities if available
-        response = {"predictions": predictions.tolist()}
-        if hasattr(model, "predict_proba") and model_type != "svm":  # SVM predict_proba is not always available
-            probabilities = model.predict_proba(input_array)
-            response["probabilities"] = probabilities.tolist()
-
-        print("Predictions generated successfully.")
-        context['ti'].xcom_push(key='predictions', value=response)
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
 
 get_data_from_data_pipeline_task = PythonOperator(
     task_id='get_data_from_data_pipeline',
@@ -878,42 +735,137 @@ task_send_alert_email = PythonOperator(
     dag=dag,
 )
 
-create_bucket_task = PythonOperator(
-    task_id='create_bucket_with_best_model_name',
-    python_callable=create_bucket_with_best_model_name,
-    provide_context=True,
+prepare_image_folder_task = BashOperator(
+    task_id='prepare_image_folder',
+    bash_command="""
+    mkdir -p /opt/airflow/gcp_image && \
+    cp /opt/airflow/models/best_lr_model.pkl /opt/airflow/gcp_image/model.pkl
+    """,
     dag=dag,
 )
 
-push_model_task = PythonOperator(
-    task_id='push_model_to_gcs_bucket',
-    python_callable=push_model_to_gcs_bucket,
-    provide_context=True,
+build_docker_image_task = BashOperator(
+    task_id='build_docker_image',
+    bash_command = """
+    export DOCKER_HOST=unix:///var/run/docker.sock &&
+    docker build \
+    -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest \
+    /opt/airflow/gcp_image""",
     dag=dag,
+    env={
+        'GCP_REGION': GCP_REGION,
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,
+        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,
+    },
 )
 
-deploy_flask_task = PythonOperator(
-    task_id='deploy_flask_api_on_cloud_run',
-    python_callable=deploy_flask_api_on_cloud_run,
-    provide_context=True,
+push_image_to_artifact_registry_task = BashOperator(
+    task_id='push_image_to_artifact_registry',
+    bash_command="""
+    # Authenticate the service account
+    gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json &&
+    
+    # Set the GCP project
+    gcloud config set project ${GCP_PROJECT_ID} &&
+    
+    # Create Artifact Registry repository (skip if it already exists)
+    gcloud artifacts repositories create ${GCP_ARTIFACT_REPO} \
+        --repository-format=docker \
+        --location=${GCP_REGION} \
+        --description="Docker repository" \
+        --project=${GCP_PROJECT_ID} \
+        --quiet || true &&
+
+    # Configure Docker to use gcloud as a credential helper
+    gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
+
+    # Push the Docker image to Artifact Registry
+    docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
+    """,
     dag=dag,
+    env={
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,     # Ensure this is defined in your DAG
+        'GCP_REGION': GCP_REGION,             # Ensure this is defined in your DAG
+        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,  # Replace with the image name
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,  # Replace with the repository name
+    },
 )
 
-load_model_task = PythonOperator(
-    task_id='load_model_from_gcs',
-    python_callable=load_model_from_gcs,
-    provide_context=True,
+deploy_to_gke_task = BashOperator(
+    task_id='deploy_to_gke',
+    bash_command="""
+    DEPLOYMENT_FILE="{{ params.deployment_file }}"
+
+    # 1. Create the GKE Cluster
+    echo "Creating GKE cluster: ${GKE_CLUSTER_NAME}
+    gcloud container clusters create ${GKE_CLUSTER_NAME} --num-nodes=3 --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+
+    # 2. Obtain authentication credentials for kubectl
+    echo "Fetching GKE credentials for cluster: $CLUSTER_NAME"
+    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+
+    # 3. Verify authentication and connectivity
+    echo "Verifying connectivity to the GKE cluster"
+    kubectl get nodes
+
+    # 4. Deploy the Docker image using the deployment.yaml file
+    echo "Deploying application using $DEPLOYMENT_FILE"
+    kubectl apply -f ${DEPLOYMENT_FILE}
+
+    # 5. Expose the deployment with a LoadBalancer
+    echo "Exposing deployment as a LoadBalancer"
+    kubectl expose deployment model-deployment --type=LoadBalancer --port=80 --target-port=8080
+
+    # 6. Fetch the external IP of the LoadBalancer
+    echo "Fetching external IP of the LoadBalancer"
+    EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+    # Wait for the LoadBalancer IP to become available
+    while [ -z "$EXTERNAL_IP" ]; do
+        echo "Waiting for LoadBalancer IP..."
+        sleep 10
+        EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    done
+
+    echo "Application is accessible at: http://$EXTERNAL_IP"
+    """,
     dag=dag,
+    env={
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,
+        'GCP_REGION': GCP_REGION,
+        'GCP_ZONE': GCP_ZONE,              # Replace with your zone
+        'GKE_CLUSTER_NAME': GKE_CLUSTER_NAME,      # Replace with your cluster name
+        'DOCKER_IMAGE': "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
+        'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
+        "DEPLOYMENT_FILE": "/path/to/deployment.yaml",
+    },
 )
 
-predict_task = PythonOperator(
-    task_id='predict_with_loaded_model',
-    python_callable=predict_with_loaded_model,
-    provide_context=True,
+test_inference_task = BashOperator(
+    task_id='test_inference',
+    bash_command="""
+    # Wait for the external IP to be assigned
+    external_ip=""
+    while [ -z "$external_ip" ]; do
+      echo "Waiting for end point..."
+      external_ip=$(kubectl get svc ${GKE_DEPLOYMENT_NAME} --output=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+      [ -z "$external_ip" ] && sleep 10
+    done
+    echo "Endpoint ready: $external_ip"
+
+    # Test inference
+    curl http://$external_ip/predict
+    """,
     dag=dag,
+
+    env={
+        'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
+    },
 )
 
 get_data_from_data_pipeline_task>>validate_data_task>>split_to_X_y_task>>train_test_split_task>>[tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>model_accuracies_task
 [tune_LR_task,tune_RF_task,tune_SVM_task,tune_XGB_task]>>bias_report_task
-[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>create_bucket_task >> push_model_task >> deploy_flask_task>>load_model_task >> predict_task>>task_send_alert_email
+[bias_report_task,model_accuracies_task]>>model_ranking_task>>select_best_model_task>>test_best_model_task>>register_best_model_task>>prepare_image_folder_task >> build_docker_image_task >> push_image_to_artifact_registry_task >> deploy_to_gke_task >> test_inference_task >>task_send_alert_email

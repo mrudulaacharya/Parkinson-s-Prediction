@@ -2,7 +2,7 @@
 
 set -e
 echo "Authenticating with GCP..."
-gcloud auth activate-service-account --key-file=/opt/airflow/iam-sa-key.json
+gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json
 
 airflow db init
 
