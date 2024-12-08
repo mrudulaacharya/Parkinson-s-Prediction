@@ -37,6 +37,12 @@ RUN apt-get update && apt-get install -y \
     docker.io && \
     rm -rf /var/lib/apt/lists/*
 
+# Install kubectl
+RUN apt-get update && apt-get install -y curl && \
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/
+
 # Ensure entrypoint.sh is executable
 COPY entrypoint.sh /opt/airflow/entrypoint.sh
 RUN chmod +x /opt/airflow/entrypoint.sh

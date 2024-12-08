@@ -42,6 +42,7 @@ GKE_CLUSTER_NAME = os.getenv("GKE_CLUSTER_NAME")
 GCP_ZONE = os.getenv("GCP_ZONE")
 GKE_DEPLOYMENT_NAME = os.getenv("GKE_DEPLOYMENT_NAME")
 GCP_ARTIFACT_REPO = os.getenv("GCP_ARTIFACT_REPO")
+DEPLOYMENT_FILE = os.getenv("DEPLOYMENT_FILE")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -568,28 +569,18 @@ def select_best_model(**context):
     return best_model_object
 
 def test_best_model(**context):
-    # Pull the best model path from XCom
-    best_model = context['ti'].xcom_pull(key="best_model_path", task_ids='select_best_model')
+    # Pull the best model from XCom
+    best_model = context['ti'].xcom_pull(key="best_model",task_ids='select_best_model')
+    model=joblib.load(best_model)
 
-    if not best_model:
-        raise ValueError("Best model path is None. Ensure 'select_best_model' task ran successfully and pushed the model path to XCom.")
-
-    logging.info(f"Best model path retrieved: {best_model}")
-    model = joblib.load(best_model)  # Load the model
-
-    # Retrieve test data
     X_test = context['ti'].xcom_pull(key='X_test', task_ids='train_test_split')
     y_test = context['ti'].xcom_pull(key='y_test', task_ids='train_test_split')
 
-    if X_test is None or y_test is None:
-        raise ValueError("Test data (X_test or y_test) not found in XCom.")
-
-    # Evaluate the model
+    # Evaluate test accuracy and classification report
     test_accuracy, report_text = evaluate_on_test_set(model, X_test, y_test)
 
-    logging.info(f"Test Accuracy for the best model: {test_accuracy}")
-    logging.info(f"Classification Report:\n{report_text}")
-
+    print(f"Test Accuracy for best model: {test_accuracy}")
+    print(f"Classification Report:\n{report_text}")
     return test_accuracy, report_text
 
 def register_best_model(**context):
@@ -739,7 +730,7 @@ prepare_image_folder_task = BashOperator(
     task_id='prepare_image_folder',
     bash_command="""
     mkdir -p /opt/airflow/gcp_image && \
-    cp /opt/airflow/models/best_lr_model.pkl /opt/airflow/gcp_image/model.pkl
+    cp {{ ti.xcom_pull(task_ids='select_best_model', key='best_model') }} /opt/airflow/gcp_image/model.pkl
     """,
     dag=dag,
 )
@@ -795,29 +786,35 @@ push_image_to_artifact_registry_task = BashOperator(
 deploy_to_gke_task = BashOperator(
     task_id='deploy_to_gke',
     bash_command="""
-    DEPLOYMENT_FILE="{{ params.deployment_file }}"
-
     # 1. Create the GKE Cluster
-    echo "Creating GKE cluster: ${GKE_CLUSTER_NAME}
-    gcloud container clusters create ${GKE_CLUSTER_NAME} --num-nodes=3 --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+    echo "Creating GKE cluster: $GKE_CLUSTER_NAME"
+    gcloud container clusters create-auto ${GKE_CLUSTER_NAME} --zone=${GCP_ZONE} --project=${GCP_PROJECT_ID}
 
     # 2. Obtain authentication credentials for kubectl
-    echo "Fetching GKE credentials for cluster: $CLUSTER_NAME"
-    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+    echo "Fetching GKE credentials for cluster: $GKE_CLUSTER_NAME"
+    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --zone=${GCP_ZONE} --project=${GCP_PROJECT_ID}
 
-    # 3. Verify authentication and connectivity
+    # 3. 
+    kubectl create secret docker-registry artifact-registry-credentials \
+    --docker-server=${GCP_REGION}-docker.pkg.dev \
+    --docker-username=_json_key \
+    --docker-password="$(cat /opt/airflow/sa-key.json)" \
+    --docker-email=shalakapadalkar16@gmail.com
+
+
+    # 4. Verify authentication and connectivity
     echo "Verifying connectivity to the GKE cluster"
     kubectl get nodes
 
-    # 4. Deploy the Docker image using the deployment.yaml file
+    # 5. Deploy the Docker image using the deployment.yaml file
     echo "Deploying application using $DEPLOYMENT_FILE"
     kubectl apply -f ${DEPLOYMENT_FILE}
 
-    # 5. Expose the deployment with a LoadBalancer
+    # 6. Expose the deployment with a LoadBalancer
     echo "Exposing deployment as a LoadBalancer"
     kubectl expose deployment model-deployment --type=LoadBalancer --port=80 --target-port=8080
 
-    # 6. Fetch the external IP of the LoadBalancer
+    # 7. Fetch the external IP of the LoadBalancer
     echo "Fetching external IP of the LoadBalancer"
     EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
@@ -839,7 +836,7 @@ deploy_to_gke_task = BashOperator(
         'DOCKER_IMAGE': "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
         'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
-        "DEPLOYMENT_FILE": "/path/to/deployment.yaml",
+        "DEPLOYMENT_FILE": DEPLOYMENT_FILE,
     },
 )
 
