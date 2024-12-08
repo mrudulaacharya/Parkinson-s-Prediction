@@ -40,9 +40,9 @@ dag = DAG(
 )
 
 # Define file paths
-participant_status_path = '/opt/airflow/raw_data1/Participant_Status_05Dec2024.csv'
-demographics_path = '/opt/airflow/raw_data1/Demographics_05Dec2024.csv'
-biospecimen_analysis_path = '/opt/airflow/raw_data1/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
+participant_status_path = '/opt/airflow/raw_data/Participant_Status_05Dec2024.csv'
+demographics_path = '/opt/airflow/raw_data/Demographics_05Dec2024.csv'
+biospecimen_analysis_path = '/opt/airflow/raw_data/SAA_Biospecimen_Analysis_Results_05Dec2024.csv'
 # Directory where CSV files are stored.
 csv_directory = '/opt/airflow/motor_assessment/'
 
@@ -1025,6 +1025,25 @@ concatenate_df_target_task=PythonOperator(
     dag=dag,
 
 )
+sync_logs = BashOperator(
+        task_id='sync_logs',
+        bash_command='gsutil -m rsync -r -x ".*scheduler/latest" /opt/airflow/logs gs://parkinsons_prediction_data_bucket/logs'
+    )
+    
+sync_outputs = BashOperator(
+        task_id='sync_outputs',
+        bash_command='gsutil -m  rsync -r /opt/airflow/outputs gs://parkinsons_prediction_data_bucket/outputs'
+    )
+    
+sync_mlrun = BashOperator(
+        task_id='sync_mlrun',
+        bash_command='gsutil -m  rsync -r /opt/airflow/mlruns gs://parkinsons_prediction_data_bucket/mlruns'
+    )
+sync_models= BashOperator(
+        task_id='sync_models',
+        bash_command='gsutil -m  rsync -r /opt/airflow/models gs://parkinsons_prediction_data_bucket/models'
+    )
+
 
  # Task to log data with DVC
 # dvc_log_task = BashOperator(
@@ -1067,5 +1086,5 @@ load_motor_senses_3_task >> clean_motor_senses_3_task
 load_motor_senses_4_task >> clean_motor_senses_4_task
 load_motor_senses_5_task >> clean_motor_senses_5_task
 [clean_motor_senses_1_task,clean_motor_senses_2_task,clean_motor_senses_3_task,clean_motor_senses_4_task,clean_motor_senses_5_task]>>filter_all_motor_senses_csvs_task>>merge_all_motor_senses_csvs_task >> deduplication_motor_senses_task
-[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>task_trigger_model_pipeline>>task_send_alert_email
+[task_clean_participantstatus_demographics_biospecimen_analysis ,deduplication_motor_senses_task]>>load_and_merge_task>>seperate_target_values_task>> missing_values_drop_task>> seperate_categorical_columns_task>> seprerate_numerical_columns_task>> missing_values_impute_5percent_task>> drop_correlated_unrelated_columns_task>> missing_values_impute_50percent_scaling_task>> concatenate_df_target_task >>sync_logs >> sync_outputs >> sync_mlrun>>task_trigger_model_pipeline>>task_send_alert_email
 
