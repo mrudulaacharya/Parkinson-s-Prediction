@@ -866,11 +866,12 @@ prepare_image_folder_task = BashOperator(
 
 build_docker_image_task = BashOperator(
     task_id='build_docker_image',
-    bash_command = """
+    bash_command="""
     export DOCKER_HOST=unix:///var/run/docker.sock &&
-    docker build \
-    -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest \
-    /opt/airflow/docker_deploy""",
+    IMAGE_TAG=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest &&
+    docker build -t $IMAGE_TAG /opt/airflow/docker_deploy &&
+    echo $IMAGE_TAG
+    """,
     dag=dag,
     env={
         'GCP_REGION': GCP_REGION,
@@ -878,6 +879,7 @@ build_docker_image_task = BashOperator(
         'GCP_PROJECT_ID': GCP_PROJECT_ID,
         'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME,
     },
+    do_xcom_push=True,  # Enable XCom push to share the image tag
 )
 
 push_image_to_artifact_registry_task = BashOperator(
@@ -908,17 +910,18 @@ push_image_to_artifact_registry_task = BashOperator(
     # Configure Docker to use gcloud as a credential helper
     gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${GCP_REGION}-docker.pkg.dev &&
     
-    docker tag ${DOCKER_IMAGE_NAME}:latest ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest &&
+    # Retrieve the image tag from XCom
+    IMAGE_TAG="{{ ti.xcom_pull(task_ids='build_docker_image') }}" &&
+    echo "Pushing Docker image: $IMAGE_TAG" &&
     
-    # Push the 'latest' image, overwriting if it already exists
-    docker push ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest
+    # Push the image to Artifact Registry
+    docker push $IMAGE_TAG
     """,
     dag=dag,
     env={
-        'GCP_PROJECT_ID': GCP_PROJECT_ID,        # Ensure this is defined in your DAG
-        'GCP_REGION': GCP_REGION,               # Ensure this is defined in your DAG
-        'DOCKER_IMAGE_NAME': DOCKER_IMAGE_NAME, # Replace with the image name
-        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO, # Replace with the repository name
+        'GCP_PROJECT_ID': GCP_PROJECT_ID,
+        'GCP_REGION': GCP_REGION,
+        'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
     },
 )
 
@@ -928,22 +931,22 @@ deploy_to_gke_task = BashOperator(
     bash_command="""
     # Check if the cluster exists
     CLUSTER_EXISTENCE=$(gcloud container clusters list \
-        --filter="name=${GKE_CLUSTER_NAME} AND zone:${GCP_ZONE}" \
+        --filter="name=${GKE_CLUSTER_NAME} AND region:${GCP_REGION}" \
         --project=${GCP_PROJECT_ID} \
         --format="value(name)")
 
     if [[ -z "$CLUSTER_EXISTENCE" ]]; then
-        echo "Cluster ${GKE_CLUSTER_NAME} does not exist in zone ${GCP_ZONE}. Creating a new cluster..."
+        echo "Cluster ${GKE_CLUSTER_NAME} does not exist in zone ${GCP_REGION}. Creating a new cluster..."
         gcloud container clusters create-auto ${GKE_CLUSTER_NAME} \
-            --zone=${GCP_ZONE} \
+            --region=${GCP_REGION} \
             --project=${GCP_PROJECT_ID}
     else
-        echo "Cluster ${GKE_CLUSTER_NAME} already exists in zone ${GCP_ZONE}. Using the existing cluster..."
+        echo "Cluster ${GKE_CLUSTER_NAME} already exists in zone ${GCP_REGION}. Using the existing cluster..."
     fi
 
     # 2. Obtain authentication credentials for kubectl
     echo "Fetching GKE credentials for cluster: $GKE_CLUSTER_NAME"
-    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --zone=${GCP_ZONE} --project=${GCP_PROJECT_ID}
+    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
 
     # 3. 
     kubectl create secret docker-registry artifact-registry-credentials \
@@ -957,6 +960,11 @@ deploy_to_gke_task = BashOperator(
     echo "Verifying connectivity to the GKE cluster"
     kubectl get nodes
 
+    if [[ ! -f "${DEPLOYMENT_FILE}" ]]; then
+        echo "Error: Deployment file ${DEPLOYMENT_FILE} not found!"
+        exit 1
+    fi
+
     # 5. Deploy the Docker image using the deployment.yaml file
     echo "Deploying application using $DEPLOYMENT_FILE"
     kubectl apply -f ${DEPLOYMENT_FILE}
@@ -967,13 +975,11 @@ deploy_to_gke_task = BashOperator(
 
     # 7. Fetch the external IP of the LoadBalancer
     echo "Fetching external IP of the LoadBalancer"
-    EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-    # Wait for the LoadBalancer IP to become available
-    while [ -z "$EXTERNAL_IP" ]; do
+    EXTERNAL_IP=""
+    while [[ -z "$EXTERNAL_IP" ]]; do
         echo "Waiting for LoadBalancer IP..."
         sleep 10
-        EXTERNAL_IP=$(kubectl get service model-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        EXTERNAL_IP=$(kubectl get service ${GKE_DEPLOYMENT_NAME} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
     done
 
     echo "Application is accessible at: http://$EXTERNAL_IP"
@@ -982,8 +988,8 @@ deploy_to_gke_task = BashOperator(
     env={
         'GCP_PROJECT_ID': GCP_PROJECT_ID,
         'GCP_REGION': GCP_REGION,
-        'GCP_ZONE': GCP_ZONE,              # Replace with your zone
-        'GKE_CLUSTER_NAME': GKE_CLUSTER_NAME,      # Replace with your cluster name
+        'GCP_ZONE': GCP_ZONE,            
+        'GKE_CLUSTER_NAME': GKE_CLUSTER_NAME,   
         'DOCKER_IMAGE': "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
         'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,

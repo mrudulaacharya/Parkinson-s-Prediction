@@ -18,15 +18,7 @@ RUN pip install --no-cache-dir dvc[all]  # Install DVC with optional S3 support
 # Switch to root to allow modification of directories
 USER root
 
-# Set permissions for docker_deploy directory
-RUN mkdir -p /opt/airflow/docker_deploy && \
-    chmod -R 775 /opt/airflow/docker_deploy && \
-    chown -R airflow:airflow /opt/airflow/docker_deploy
-
-# Set permissions for the service account key file
-RUN chmod 400 /opt/airflow/sa-key.json && \
-    chown airflow:airflow /opt/airflow/sa-key.json
-
+RUN chmod -R 775 /opt/airflow/docker_deploy 
 
 RUN apt-get update && apt-get install -y \
     curl apt-transport-https ca-certificates gnupg
