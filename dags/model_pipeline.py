@@ -47,6 +47,7 @@ GCP_ARTIFACT_REPO = os.getenv("GCP_ARTIFACT_REPO")
 DEPLOYMENT_FILE = os.getenv("DEPLOYMENT_FILE")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 DATA_BUCKET_NAME = os.getenv("DATA_BUCKET_NAME")
+GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # Set tracking server URI to a local directory.
 mlflow.set_tracking_uri("file:/opt/airflow/mlruns")
@@ -66,7 +67,7 @@ dag = DAG(
     'model_pipeline',
     default_args=default_args,
     description='Model pipeline with custom email alerts for task failures and GCP integration',
-    schedule_interval=timedelta(days=1),
+    schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     is_paused_upon_creation=False,
@@ -929,6 +930,8 @@ push_image_to_artifact_registry_task = BashOperator(
 deploy_to_gke_task = BashOperator(
     task_id='deploy_to_gke',
     bash_command="""
+
+    
     # Check if the cluster exists
     CLUSTER_EXISTENCE=$(gcloud container clusters list \
         --filter="name=${GKE_CLUSTER_NAME} AND region:${GCP_REGION}" \
@@ -944,17 +947,17 @@ deploy_to_gke_task = BashOperator(
         echo "Cluster ${GKE_CLUSTER_NAME} already exists in zone ${GCP_REGION}. Using the existing cluster..."
     fi
 
-    # 2. Obtain authentication credentials for kubectl
-    echo "Fetching GKE credentials for cluster: $GKE_CLUSTER_NAME"
-    gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
-
-    # 3. 
+   # 2. Obtain authentication credentials for kubectl
+   echo "Fetching GKE credentials for cluster: $GKE_CLUSTER_NAME"
+   export PATH=$PATH:/usr/bin/gke-gcloud-auth-plugin &&gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS && gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
+      
     kubectl create secret docker-registry artifact-registry-credentials \
     --docker-server=${GCP_REGION}-docker.pkg.dev \
     --docker-username=_json_key \
     --docker-password="$(cat /opt/airflow/sa-key.json)" \
     --docker-email=shalakapadalkar16@gmail.com
 
+    
 
     # 4. Verify authentication and connectivity
     echo "Verifying connectivity to the GKE cluster"
@@ -990,10 +993,12 @@ deploy_to_gke_task = BashOperator(
         'GCP_REGION': GCP_REGION,
         'GCP_ZONE': GCP_ZONE,            
         'GKE_CLUSTER_NAME': GKE_CLUSTER_NAME,   
-        'DOCKER_IMAGE': "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
+        'DOCKER_IMAGE': f"{GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${DOCKER_IMAGE_NAME}:latest",
         'GCP_ARTIFACT_REPO': GCP_ARTIFACT_REPO,
         'GKE_DEPLOYMENT_NAME': GKE_DEPLOYMENT_NAME,
         "DEPLOYMENT_FILE": DEPLOYMENT_FILE,
+        'KUBECONFIG': '/opt/airflow/.kube/config',  # Set the path to your kubeconfig
+        'GOOGLE_APPLICATION_CREDENTIALS': GOOGLE_APPLICATION_CREDENTIALS,
     },
 )
 

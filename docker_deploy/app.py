@@ -46,7 +46,9 @@ def predict():
 
     # Make prediction
     prediction = model.predict(preprocessed_df)
-    return render_template('index.html', prediction=prediction[0])  # Show prediction on the page
+
+    maps={0:"Parkinson's Disease",1:"Healthy Control",2:"SWEDD",3:"Prodromal"}
+    return render_template('index.html', prediction=maps[prediction[0]])  # Show prediction on the page
     
 
 if __name__ == '__main__':

@@ -1,7 +1,14 @@
 #!/bin/bash
 set -e
 echo "Authenticating with GCP..."
-gcloud auth activate-service-account --key-file=/opt/airflow/sa-key.json
+
+
+mkdir -p $HOME/.kube
+export KUBECONFIG=/opt/airflow/.kube/config
+
+
+gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --region=${GCP_REGION} --project=${GCP_PROJECT_ID}
 
 # Set GCP Project
 gcloud config set project ${GCP_PROJECT_ID}
