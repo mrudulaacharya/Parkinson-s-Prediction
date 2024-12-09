@@ -28,7 +28,7 @@ To run this project, you need:
 8.	To clean up all stopped containers, networks, and volumes created by Docker Compose: `docker-compose down –volumes`
 9.	To access the airflow web UI: open http://localhost:8080 in your browser.
 10.	Trigger both DAGs: data_pipeline and model_pipeline
-11.	To view the model parameters, accuracy metrics, model metadata: paste 127.0.0.1:5000 in the browser
+11.	To view the model parameters, accuracy metrics like F-1 score, model metadata: paste 127.0.0.1:5000 in the browser
 
 
 ## Dataset
@@ -40,8 +40,8 @@ The dataset is sourced from the Parkinson's Progression Markers Initiative (PPMI
 • participant_status_load: Loads the "Participant_Status" CSV file into a DataFrame.  
 • demographics_load: Loads the "Demographics" CSV file into a DataFrame.  
 • clean_participant_status: Cleans the "Participant_Status" DataFrame by converting enrollment dates, renaming a column, and dropping unnecessary columns.  
-• clean_demographics: Cleans the "Demographics" DataFrame by dropping columns that are not needed.  
 • merge_participant_status_and_demographics: Merges the cleaned "Participant_Status" and "Demographics" DataFrames on the participant ID and filters rows with valid enrollment statuses.  
+• clean_demographics: Cleans the "Demographics" DataFrame by dropping columns that are not needed.
 • clean_participantstatus_demographic: Further cleans the merged "Participant_Status" and "Demographics" DataFrame by dropping additional unnecessary columns.  
 • biospecimen_analysis_load: Loads the "SAA_Biospecimen_Analysis_Results" CSV file into a DataFrame.  
 • clean_biospecimen_analysis: Cleans the "Biospecimen_Analysis" DataFrame by formatting dates and dropping irrelevant columns.  
